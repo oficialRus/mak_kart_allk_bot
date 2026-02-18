@@ -1,0 +1,8 @@
+.env
+*.exe
+*.test
+/bot
+go.sum
+mini_app/node_modules/
+mini_app/dist/
+mini_app/.env
