@@ -12,7 +12,7 @@ import (
 	"mak_kart_bot/internal/middleware"
 	"mak_kart_bot/internal/repository"
 )
-/////// Appp
+/////// Apppз
 func main() {
 	cfg, err := config.Load()
 	if err != nil {
