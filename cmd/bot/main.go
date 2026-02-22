@@ -1,12 +1,18 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
+	"io"
 	"log"
+	"mime/multipart"
+	"net/http"
 	"os"
+	"strconv"
 	"strings"
 
-	"github.com/joho/godotenv"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	"github.com/joho/godotenv"
 )
 
 func main() {
@@ -21,6 +27,11 @@ func main() {
 	token := strings.TrimSpace(os.Getenv("BOT_TOKEN"))
 	if token == "" {
 		log.Fatal("BOT_TOKEN is not set. Проверьте .env в корне проекта и переменную BOT_TOKEN.")
+	}
+	// URL мини-приложения (тест). После деплоя mini_app подставьте свой HTTPS-адрес.
+	miniappURL := strings.TrimSpace(os.Getenv("MINI_APP_URL"))
+	if miniappURL == "" {
+		miniappURL = "https://localhost:5173/"
 	}
 
 	log.Println("Connecting to Telegram...")
@@ -57,6 +68,12 @@ func main() {
 			log.Printf("[update %d] (other)", update.UpdateID)
 		}
 
+		// Нажатие inline-кнопки
+		if update.CallbackQuery != nil {
+			handleCallback(bot, update.CallbackQuery, miniappURL, token)
+			continue
+		}
+
 		if update.Message == nil {
 			continue
 		}
@@ -71,11 +88,11 @@ func main() {
 }
 
 func handleStart(bot *tgbotapi.BotAPI, chatID int64) {
-	msg := tgbotapi.NewMessage(chatID, "Привет, дорогой друг! Мы рады вас видеть! Выберите одну из кнопок ниже.")
+	msg := tgbotapi.NewMessage(chatID, "Здравствуйте! Мы рады вас видеть! Выберите одну из кнопок ниже.")
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData("Обратная связь", "feedback"),
-			tgbotapi.NewInlineKeyboardButtonData("Вам подарок от психолога", "gift"),
+			tgbotapi.NewInlineKeyboardButtonData("Подарок", "gift"),
 		),
 	)
 	msg.ReplyMarkup = keyboard
@@ -85,4 +102,116 @@ func handleStart(bot *tgbotapi.BotAPI, chatID int64) {
 		return
 	}
 	log.Printf("Sent start message to chat %d", chatID)
+}
+
+const (
+	feedbackURL       = "https://t.me/RyslanNovikov"
+	giftImageURL      = "https://placehold.co/600x400/eee/333/png?text=Подарок+от+психолога" // заглушка картинки
+	giftCaption       = "🎁 Ваш подарок от психолога — короткий тест, который поможет лучше понять себя. Нажмите «Открыть тест» или узнайте, для чего это нужно."
+	giftWhyText       = "Этот тест помогает определить ваш текущий уровень и подобрать подходящие материалы. Займёт пару минут и даст персональную рекомендацию."
+)
+
+func handleCallback(bot *tgbotapi.BotAPI, q *tgbotapi.CallbackQuery, miniappURL, token string) {
+	chatID := q.Message.Chat.ID
+	callbackID := q.ID
+
+	switch q.Data {
+	case "feedback":
+		text := "У вас возникла проблема с товаром или есть другой вопрос? Напишите сюда — решим ваш вопрос:\n\n" + feedbackURL
+		msg := tgbotapi.NewMessage(chatID, text)
+		msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
+			tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonURL("Написать в Telegram", feedbackURL),
+			),
+		)
+		if _, err := bot.Send(msg); err != nil {
+			log.Printf("ERROR sending feedback message: %v", err)
+		}
+	case "gift":
+		sendGiftMessage(bot, chatID, miniappURL, token)
+	case "gift_why":
+		_, _ = bot.Send(tgbotapi.NewMessage(chatID, giftWhyText))
+	case "gift_back":
+		handleStart(bot, chatID)
+	case "gift_next":
+		sendMainMenu(bot, chatID)
+	case "main_menu_back":
+		sendGiftMessage(bot, chatID, miniappURL, token)
+	case "main_menu_ai", "main_menu_education", "main_menu_contacts", "main_menu_shop":
+		_, _ = bot.Request(tgbotapi.NewCallback(callbackID, "Скоро здесь будет раздел."))
+		return
+	default:
+		_, _ = bot.Request(tgbotapi.NewCallback(callbackID, ""))
+		return
+	}
+
+	_, _ = bot.Request(tgbotapi.NewCallback(callbackID, ""))
+}
+
+// Под фото — четыре кнопки: «Открыть тест», «Для чего это нужно», «Назад», «Далее».
+func sendGiftMessage(bot *tgbotapi.BotAPI, chatID int64, miniappURL, token string) {
+	buttonURL := miniappURL
+	if strings.Contains(miniappURL, "localhost") {
+		buttonURL = "https://example.com"
+	}
+	replyMarkup := map[string]interface{}{
+		"inline_keyboard": [][]map[string]interface{}{
+			{{"text": "Открыть тест", "web_app": map[string]string{"url": buttonURL}}},
+			{
+				{"text": "Для чего это нужно", "callback_data": "gift_why"},
+				{"text": "Назад", "callback_data": "gift_back"},
+				{"text": "Далее", "callback_data": "gift_next"},
+			},
+		},
+	}
+	markupJSON, _ := json.Marshal(replyMarkup)
+
+	body := &bytes.Buffer{}
+	w := multipart.NewWriter(body)
+	_ = w.WriteField("chat_id", strconv.FormatInt(chatID, 10))
+	_ = w.WriteField("photo", giftImageURL)
+	_ = w.WriteField("caption", giftCaption)
+	_ = w.WriteField("reply_markup", string(markupJSON))
+	_ = w.Close()
+
+	req, err := http.NewRequest(http.MethodPost, "https://api.telegram.org/bot"+token+"/sendPhoto", body)
+	if err != nil {
+		log.Printf("ERROR sendGiftMessage request: %v", err)
+		return
+	}
+	req.Header.Set("Content-Type", "multipart/form-data; boundary="+w.Boundary())
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		log.Printf("ERROR sendGiftMessage: %v", err)
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(resp.Body)
+		log.Printf("ERROR sendPhoto response: %d %s", resp.StatusCode, string(b))
+	}
+}
+
+// Главное меню после «Далее»: ИИ-психолог Коуч, Обучение, Контакты, Магазин, Назад (возврат к подарку).
+func sendMainMenu(bot *tgbotapi.BotAPI, chatID int64) {
+	msg := tgbotapi.NewMessage(chatID, "Главное меню. Выберите раздел:")
+	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("ИИ-психолог Коуч", "main_menu_ai"),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("Обучение", "main_menu_education"),
+			tgbotapi.NewInlineKeyboardButtonData("Контакты", "main_menu_contacts"),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("Магазин", "main_menu_shop"),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("Назад", "main_menu_back"),
+		),
+	)
+	if _, err := bot.Send(msg); err != nil {
+		log.Printf("ERROR sending main menu: %v", err)
+	}
 }
