@@ -194,7 +194,7 @@ func sendGiftMessage(_ *tgbotapi.BotAPI, chatID int64, miniappURL, token string)
 	}
 }
 
-// Главное меню после «Далее»: Мини рулетка, ИИ-психолог Коуч, Обучение, Контакты, Магазин, Назад.
+// Главное меню после «Далее»: ИИ-психолог Коуч первым, затем Мини рулетка, Обучение, Контакты, Магазин, Назад.
 func sendMainMenu(bot *tgbotapi.BotAPI, chatID int64, miniappURL string) {
 	buttonURL := miniappURL
 	if strings.Contains(miniappURL, "localhost") {
@@ -203,10 +203,10 @@ func sendMainMenu(bot *tgbotapi.BotAPI, chatID int64, miniappURL string) {
 	msg := tgbotapi.NewMessage(chatID, "Главное меню. Выберите раздел:")
 	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonURL("Мини рулетка", buttonURL),
+			tgbotapi.NewInlineKeyboardButtonData("ИИ-психолог Коуч", "main_menu_ai"),
 		),
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("ИИ-психолог Коуч", "main_menu_ai"),
+			tgbotapi.NewInlineKeyboardButtonURL("Мини рулетка", buttonURL),
 		),
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData("Обучение", "main_menu_education"),
