@@ -154,7 +154,7 @@ func handleCallback(bot *tgbotapi.BotAPI, q *tgbotapi.CallbackQuery, miniappURL,
 }
 
 // Под фото — две кнопки: «Открыть тест», «Далее».
-func sendGiftMessage(bot *tgbotapi.BotAPI, chatID int64, miniappURL, token string) {
+func sendGiftMessage(_ *tgbotapi.BotAPI, chatID int64, miniappURL, token string) {
 	buttonURL := miniappURL
 	if strings.Contains(miniappURL, "localhost") {
 		buttonURL = "https://example.com"
