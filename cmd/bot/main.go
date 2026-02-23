@@ -91,6 +91,9 @@ func handleStart(bot *tgbotapi.BotAPI, chatID int64) {
 	msg := tgbotapi.NewMessage(chatID, "Здравствуйте! Мы рады вас видеть! Выберите одну из кнопок ниже.")
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("ИИ Психолог-Коуч", "ai_coach"),
+		),
+		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData("Обратная связь", "feedback"),
 			tgbotapi.NewInlineKeyboardButtonData("Подарок", "gift"),
 		),
@@ -107,7 +110,7 @@ func handleStart(bot *tgbotapi.BotAPI, chatID int64) {
 const (
 	feedbackURL       = "https://t.me/RyslanNovikov"
 	giftImageURL      = "https://placehold.co/600x400/eee/333/png?text=Подарок+от+психолога" // заглушка картинки
-	giftCaption       = "🎁 Ваш подарок от психолога — короткий тест, который поможет лучше понять себя. Нажмите «Открыть тест» или узнайте, для чего это нужно."
+	giftCaption       = "🎁 Ваш подарок от психолога — короткий тест, который поможет лучше понять себя. Нажмите «Мини рулетка» или перейдите далее."
 	giftWhyText       = "Этот тест помогает определить ваш текущий уровень и подобрать подходящие материалы. Займёт пару минут и даст персональную рекомендацию."
 )
 
@@ -134,9 +137,11 @@ func handleCallback(bot *tgbotapi.BotAPI, q *tgbotapi.CallbackQuery, miniappURL,
 	case "gift_back":
 		handleStart(bot, chatID)
 	case "gift_next":
-		sendMainMenu(bot, chatID)
+		sendMainMenu(bot, chatID, miniappURL)
 	case "main_menu_back":
 		sendGiftMessage(bot, chatID, miniappURL, token)
+	case "ai_coach":
+		_, _ = bot.Send(tgbotapi.NewMessage(chatID, "Раздел «ИИ Психолог-Коуч» в разработке. Скоро здесь будет чат с психологом-коучем."))
 	case "main_menu_ai", "main_menu_education", "main_menu_contacts", "main_menu_shop":
 		_, _ = bot.Request(tgbotapi.NewCallback(callbackID, "Скоро здесь будет раздел."))
 		return
@@ -148,7 +153,7 @@ func handleCallback(bot *tgbotapi.BotAPI, q *tgbotapi.CallbackQuery, miniappURL,
 	_, _ = bot.Request(tgbotapi.NewCallback(callbackID, ""))
 }
 
-// Под фото — четыре кнопки: «Открыть тест», «Для чего это нужно», «Назад», «Далее».
+// Под фото — две кнопки: «Открыть тест», «Далее».
 func sendGiftMessage(bot *tgbotapi.BotAPI, chatID int64, miniappURL, token string) {
 	buttonURL := miniappURL
 	if strings.Contains(miniappURL, "localhost") {
@@ -156,12 +161,8 @@ func sendGiftMessage(bot *tgbotapi.BotAPI, chatID int64, miniappURL, token strin
 	}
 	replyMarkup := map[string]interface{}{
 		"inline_keyboard": [][]map[string]interface{}{
-			{{"text": "Открыть тест", "web_app": map[string]string{"url": buttonURL}}},
-			{
-				{"text": "Для чего это нужно", "callback_data": "gift_why"},
-				{"text": "Назад", "callback_data": "gift_back"},
-				{"text": "Далее", "callback_data": "gift_next"},
-			},
+			{{"text": "Мини рулетка", "web_app": map[string]string{"url": buttonURL}}},
+			{{"text": "Далее", "callback_data": "gift_next"}},
 		},
 	}
 	markupJSON, _ := json.Marshal(replyMarkup)
@@ -193,10 +194,17 @@ func sendGiftMessage(bot *tgbotapi.BotAPI, chatID int64, miniappURL, token strin
 	}
 }
 
-// Главное меню после «Далее»: ИИ-психолог Коуч, Обучение, Контакты, Магазин, Назад (возврат к подарку).
-func sendMainMenu(bot *tgbotapi.BotAPI, chatID int64) {
+// Главное меню после «Далее»: Мини рулетка, ИИ-психолог Коуч, Обучение, Контакты, Магазин, Назад.
+func sendMainMenu(bot *tgbotapi.BotAPI, chatID int64, miniappURL string) {
+	buttonURL := miniappURL
+	if strings.Contains(miniappURL, "localhost") {
+		buttonURL = "https://example.com"
+	}
 	msg := tgbotapi.NewMessage(chatID, "Главное меню. Выберите раздел:")
 	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonURL("Мини рулетка", buttonURL),
+		),
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData("ИИ-психолог Коуч", "main_menu_ai"),
 		),
