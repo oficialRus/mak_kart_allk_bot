@@ -11,11 +11,14 @@ import (
 	"strconv"
 	"strings"
 
+	"mak_kart_allk_bot/handlers/cabinet"
 	"mak_kart_allk_bot/handlers/card_day"
 	"mak_kart_allk_bot/handlers/card_decode"
+	"mak_kart_allk_bot/handlers/education"
 	"mak_kart_allk_bot/handlers/mainmenu"
 	"mak_kart_allk_bot/handlers/number_day"
 	"mak_kart_allk_bot/handlers/question"
+	"mak_kart_allk_bot/handlers/shop"
 	"mak_kart_allk_bot/handlers/technique"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
@@ -97,6 +100,10 @@ func main() {
 		if question.HandleUserMessage(bot, update.Message.Chat.ID, update.Message.Text) {
 			continue
 		}
+		// если пользователь в процессе регистрации — обрабатываем ответ
+		if cabinet.HandleRegistrationMessage(bot, update.Message.Chat.ID, update.Message) {
+			continue
+		}
 	}
 }
 
@@ -135,7 +142,7 @@ func handleCallback(bot *tgbotapi.BotAPI, q *tgbotapi.CallbackQuery, miniappURL,
 	callbackID := q.ID
 
 	switch q.Data {
-	case "feedback":
+	case "feedback", "main_menu_contacts":
 		text := "У вас возникла проблема с товаром или есть другой вопрос? Напишите сюда — решим ваш вопрос:\n\n" + feedbackURL
 		msg := tgbotapi.NewMessage(chatID, text)
 		msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
@@ -156,21 +163,7 @@ func handleCallback(bot *tgbotapi.BotAPI, q *tgbotapi.CallbackQuery, miniappURL,
 		mainmenu.Handle(bot, chatID, miniappURL)
 	case "main_menu_back":
 		sendGiftMessage(bot, chatID, miniappURL, token)
-	case "ai_coach":
-		msg := tgbotapi.NewMessage(chatID, aiCoachIntroText)
-		msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
-			tgbotapi.NewInlineKeyboardRow(
-				tgbotapi.NewInlineKeyboardButtonData("Назад", "ai_coach_back"),
-				tgbotapi.NewInlineKeyboardButtonData("Далее", "ai_coach_next"),
-			),
-			tgbotapi.NewInlineKeyboardRow(
-				tgbotapi.NewInlineKeyboardButtonData("Главное меню", "ai_coach_main_menu"),
-			),
-		)
-		if _, err := bot.Send(msg); err != nil {
-			log.Printf("ERROR sending ai_coach intro: %v", err)
-		}
-	case "ai_coach_next":
+	case "ai_coach", "ai_coach_next":
 		sendAiCoachWelcome(bot, chatID, token, miniappURL)
 	case "ai_coach_question":
 		question.Handle(bot, chatID)
@@ -186,9 +179,28 @@ func handleCallback(bot *tgbotapi.BotAPI, q *tgbotapi.CallbackQuery, miniappURL,
 		mainmenu.Handle(bot, chatID, miniappURL)
 	case "ai_coach_back":
 		handleStart(bot, chatID)
-	case "main_menu_ai", "main_menu_education", "main_menu_contacts", "main_menu_shop", "main_menu_cabinet":
-		_, _ = bot.Request(tgbotapi.NewCallback(callbackID, "Скоро здесь будет раздел."))
-		return
+	case "main_menu_ai":
+		sendAiCoachWelcome(bot, chatID, token, miniappURL)
+	case "main_menu_education":
+		education.Handle(bot, chatID)
+	case "education_survey":
+		_, _ = bot.Send(tgbotapi.NewMessage(chatID, "Опрос в разработке. Скоро здесь можно будет пройти опрос."))
+	case "main_menu_shop":
+		shop.Handle(bot, chatID)
+	case "main_menu_cabinet":
+		cabinet.Handle(bot, chatID)
+	case "cabinet_register":
+		cabinet.StartRegistration(bot, chatID)
+	case "cabinet_profile":
+		cabinet.SendCabinetMenu(bot, chatID, "Раздел «Профиль» в разработке. Здесь будут ваши данные и настройки.")
+	case "cabinet_my_reviews":
+		cabinet.SendCabinetMenu(bot, chatID, "Раздел «Мои разборы» в разработке.")
+	case "cabinet_matrix":
+		cabinet.SendCabinetMenu(bot, chatID, "Раздел «Матрица по дате рождения» в разработке.")
+	case "cabinet_number_day":
+		number_day.Handle(bot, chatID)
+	case "cabinet_education":
+		education.Handle(bot, chatID)
 	default:
 		_, _ = bot.Request(tgbotapi.NewCallback(callbackID, ""))
 		return

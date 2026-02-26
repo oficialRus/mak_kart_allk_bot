@@ -7,7 +7,10 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-// Handle рисует главное меню.
+// Картинка-заглушка для главного меню.
+const mainMenuPlaceholderURL = "https://placehold.co/600x400/1a1a2e/eee/png?text=Главное+меню"
+
+// Handle рисует главное меню (фото-заглушка + кнопки).
 // miniappURL — адрес мини-приложения «Цифра дня».
 func Handle(bot *tgbotapi.BotAPI, chatID int64, miniappURL string) {
 	buttonURL := miniappURL
@@ -15,8 +18,9 @@ func Handle(bot *tgbotapi.BotAPI, chatID int64, miniappURL string) {
 		buttonURL = "https://example.com"
 	}
 
-	msg := tgbotapi.NewMessage(chatID, "Главное меню. Выберите раздел:")
-	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
+	photo := tgbotapi.NewPhoto(chatID, tgbotapi.FileURL(mainMenuPlaceholderURL))
+	photo.Caption = "Главное меню. Выберите раздел:"
+	photo.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData("ИИ-психолог Коуч", "main_menu_ai"),
 		),
@@ -32,7 +36,7 @@ func Handle(bot *tgbotapi.BotAPI, chatID int64, miniappURL string) {
 			tgbotapi.NewInlineKeyboardButtonData("Личный кабинет", "main_menu_cabinet"),
 		),
 	)
-	if _, err := bot.Send(msg); err != nil {
+	if _, err := bot.Send(photo); err != nil {
 		log.Printf("ERROR sending main menu: %v", err)
 	}
 }
