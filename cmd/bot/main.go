@@ -90,6 +90,12 @@ func main() {
 		if isStart {
 			log.Printf("Received /start from chat %d", update.Message.Chat.ID)
 			handleStart(bot, update.Message.Chat.ID)
+			continue
+		}
+
+		// если есть активная сессия «Вопрос» — передаём сообщение ИИ-коучу
+		if question.HandleUserMessage(bot, update.Message.Chat.ID, update.Message.Text) {
+			continue
 		}
 	}
 }
