@@ -160,7 +160,7 @@ func handleCallback(bot *tgbotapi.BotAPI, q *tgbotapi.CallbackQuery, miniappURL,
 	case "gift_back":
 		handleStart(bot, chatID)
 	case "gift_next":
-		mainmenu.Handle(bot, chatID, miniappURL)
+		mainmenu.Handle(bot, chatID, miniappURL, token)
 	case "main_menu_back":
 		sendGiftMessage(bot, chatID, miniappURL, token)
 	case "ai_coach", "ai_coach_next":
@@ -176,7 +176,7 @@ func handleCallback(bot *tgbotapi.BotAPI, q *tgbotapi.CallbackQuery, miniappURL,
 	case "ai_coach_number_day":
 		number_day.Handle(bot, chatID)
 	case "ai_coach_main_menu":
-		mainmenu.Handle(bot, chatID, miniappURL)
+		mainmenu.Handle(bot, chatID, miniappURL, token)
 	case "ai_coach_back":
 		handleStart(bot, chatID)
 	case "main_menu_ai":

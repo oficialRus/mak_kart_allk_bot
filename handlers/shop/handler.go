@@ -28,6 +28,9 @@ func Handle(bot *tgbotapi.BotAPI, chatID int64) {
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonURL("Перейти в магазин", shopURL),
 		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("Главное меню", "ai_coach_main_menu"),
+		),
 	)
 	if _, err := bot.Send(photo); err != nil {
 		log.Printf("ERROR sending shop message: %v", err)
