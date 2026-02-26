@@ -252,7 +252,7 @@ func sendGiftMessage(_ *tgbotapi.BotAPI, chatID int64, miniappURL, token string)
 
 // Главное меню после «Далее»: ИИ-психолог Коуч первым, затем Мини рулетка, Обучение, Контакты, Магазин, Назад.
 // Приветственное сообщение после «Далее» в разделе ИИ Психолог-Коуч — фото с подписью и кнопками.
-func sendAiCoachWelcome(bot *tgbotapi.BotAPI, chatID int64, token, miniappURL string) {
+func sendAiCoachWelcome(_ *tgbotapi.BotAPI, chatID int64, token, miniappURL string) {
 	imageURL := strings.TrimSpace(os.Getenv("AI_COACH_WELCOME_IMAGE"))
 	if imageURL == "" {
 		imageURL = aiCoachWelcomeImageURL

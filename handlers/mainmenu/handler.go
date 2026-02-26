@@ -19,7 +19,7 @@ const mainMenuPlaceholderURL = "https://placehold.co/600x400/1a1a2e/eee/png?text
 // Handle рисует главное меню (фото-заглушка + кнопки).
 // miniappURL — адрес мини-приложения «Цифра дня» (кнопка открывает его как Mini App в Telegram).
 // token — токен бота для отправки sendPhoto с клавиатурой web_app.
-func Handle(bot *tgbotapi.BotAPI, chatID int64, miniappURL, token string) {
+func Handle(_ *tgbotapi.BotAPI, chatID int64, miniappURL, token string) {
 	buttonURL := miniappURL
 	if strings.Contains(miniappURL, "localhost") {
 		buttonURL = "https://example.com"
