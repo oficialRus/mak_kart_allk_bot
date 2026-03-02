@@ -1,4 +1,5 @@
 .env
+server-credentials.env
 *.exe
 *.test
 /bot
