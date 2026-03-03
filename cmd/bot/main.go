@@ -141,6 +141,12 @@ func handleCallback(bot *tgbotapi.BotAPI, q *tgbotapi.CallbackQuery, miniappURL,
 	chatID := q.Message.Chat.ID
 	callbackID := q.ID
 
+	// Сначала проверяем, не относится ли callback к опросу в разделе «Обучение».
+	if education.HandleSurveyCallback(bot, chatID, q.Data) {
+		_, _ = bot.Request(tgbotapi.NewCallback(callbackID, ""))
+		return
+	}
+
 	switch q.Data {
 	case "feedback", "main_menu_contacts":
 		text := "У вас возникла проблема с товаром или есть другой вопрос? Напишите сюда — решим ваш вопрос:\n\n" + feedbackURL
@@ -148,6 +154,9 @@ func handleCallback(bot *tgbotapi.BotAPI, q *tgbotapi.CallbackQuery, miniappURL,
 		msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
 			tgbotapi.NewInlineKeyboardRow(
 				tgbotapi.NewInlineKeyboardButtonURL("Написать в Telegram", feedbackURL),
+			),
+			tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonData("Главное меню", "ai_coach_main_menu"),
 			),
 		)
 		if _, err := bot.Send(msg); err != nil {
@@ -183,8 +192,6 @@ func handleCallback(bot *tgbotapi.BotAPI, q *tgbotapi.CallbackQuery, miniappURL,
 		sendAiCoachWelcome(bot, chatID, token, miniappURL)
 	case "main_menu_education":
 		education.Handle(bot, chatID)
-	case "education_survey":
-		_, _ = bot.Send(tgbotapi.NewMessage(chatID, "Опрос в разработке. Скоро здесь можно будет пройти опрос."))
 	case "main_menu_shop":
 		shop.Handle(bot, chatID)
 	case "main_menu_cabinet":
@@ -192,15 +199,112 @@ func handleCallback(bot *tgbotapi.BotAPI, q *tgbotapi.CallbackQuery, miniappURL,
 	case "cabinet_register":
 		cabinet.StartRegistration(bot, chatID)
 	case "cabinet_profile":
-		cabinet.SendCabinetMenu(bot, chatID, "Раздел «Профиль» в разработке. Здесь будут ваши данные и настройки.")
+		cabinet.SendEditProfileMenu(bot, chatID)
 	case "cabinet_my_reviews":
 		cabinet.SendCabinetMenu(bot, chatID, "Раздел «Мои разборы» в разработке.")
 	case "cabinet_matrix":
 		cabinet.SendCabinetMenu(bot, chatID, "Раздел «Матрица по дате рождения» в разработке.")
 	case "cabinet_number_day":
-		number_day.Handle(bot, chatID)
+		// Из личного кабинета «Цифра дня» открывает то же мини‑приложение, что и в разделе «Подарок».
+		buttonURL := miniappURL
+		if strings.Contains(miniappURL, "localhost") {
+			buttonURL = "https://example.com"
+		}
+
+		replyMarkup := map[string]interface{}{
+			"inline_keyboard": [][]map[string]interface{}{
+				{
+					{"text": "Цифра дня", "web_app": map[string]string{"url": buttonURL}},
+				},
+			},
+		}
+		markupJSON, _ := json.Marshal(replyMarkup)
+
+		body := &bytes.Buffer{}
+		w := multipart.NewWriter(body)
+		_ = w.WriteField("chat_id", strconv.FormatInt(chatID, 10))
+		_ = w.WriteField("text", "Откройте мини‑приложение «Цифра дня» по кнопке ниже.")
+		_ = w.WriteField("reply_markup", string(markupJSON))
+		_ = w.Close()
+
+		req, err := http.NewRequest(http.MethodPost, "https://api.telegram.org/bot"+token+"/sendMessage", body)
+		if err != nil {
+			log.Printf("ERROR cabinet_number_day request: %v", err)
+			break
+		}
+		req.Header.Set("Content-Type", "multipart/form-data; boundary="+w.Boundary())
+
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			log.Printf("ERROR cabinet_number_day sendMessage: %v", err)
+			break
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			b, _ := io.ReadAll(resp.Body)
+			log.Printf("ERROR cabinet_number_day response: %d %s", resp.StatusCode, string(b))
+		}
 	case "cabinet_education":
 		education.Handle(bot, chatID)
+	case "cabinet_edit_phone":
+		cabinet.SendCabinetMenu(bot, chatID, "Изменение телефона пока в разработке. Сейчас изменить данные можно через поддержку.")
+	case "cabinet_edit_fio":
+		cabinet.SendCabinetMenu(bot, chatID, "Изменение ФИО пока в разработке. Сейчас изменить данные можно через поддержку.")
+	case "cabinet_edit_birthdate":
+		cabinet.SendCabinetMenu(bot, chatID, "Изменение даты рождения пока в разработке. Сейчас изменить данные можно через поддержку.")
+	case "question_end":
+		question.EndSession(chatID)
+
+		// Те же кнопки, что и в разделе «ИИ Психолог-Коуч» (включая кнопку Mini App «Цифра дня»).
+		buttonURL := miniappURL
+		if strings.Contains(miniappURL, "localhost") {
+			buttonURL = "https://example.com"
+		}
+
+		replyMarkup := map[string]interface{}{
+			"inline_keyboard": [][]map[string]interface{}{
+				{
+					{"text": "Вопрос", "callback_data": "ai_coach_question"},
+					{"text": "Техника", "callback_data": "ai_coach_technique"},
+				},
+				{
+					{"text": "Расшифровка карты", "callback_data": "ai_coach_card_decode"},
+				},
+				{
+					{"text": "Карта дня", "callback_data": "ai_coach_card_day"},
+					{"text": "Цифра дня", "web_app": map[string]string{"url": buttonURL}},
+				},
+				{
+					{"text": "Главное меню", "callback_data": "ai_coach_main_menu"},
+				},
+			},
+		}
+		markupJSON, _ := json.Marshal(replyMarkup)
+
+		body := &bytes.Buffer{}
+		w := multipart.NewWriter(body)
+		_ = w.WriteField("chat_id", strconv.FormatInt(chatID, 10))
+		_ = w.WriteField("text", "Диалог с ИИ Психолог-Коуч завершён. Если захотите продолжить, снова нажмите кнопку «Вопрос» в разделе ИИ Психолог-Коуч.")
+		_ = w.WriteField("reply_markup", string(markupJSON))
+		_ = w.Close()
+
+		req, err := http.NewRequest(http.MethodPost, "https://api.telegram.org/bot"+token+"/sendMessage", body)
+		if err != nil {
+			log.Printf("ERROR question_end request: %v", err)
+			break
+		}
+		req.Header.Set("Content-Type", "multipart/form-data; boundary="+w.Boundary())
+
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			log.Printf("ERROR question_end sendMessage: %v", err)
+			break
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			b, _ := io.ReadAll(resp.Body)
+			log.Printf("ERROR question_end response: %d %s", resp.StatusCode, string(b))
+		}
 	default:
 		_, _ = bot.Request(tgbotapi.NewCallback(callbackID, ""))
 		return
