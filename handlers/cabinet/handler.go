@@ -38,10 +38,10 @@ func Handle(bot *tgbotapi.BotAPI, chatID int64) {
 	photo.Caption = cabinetCaption
 	photo.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("Пройти регистрацию", "cabinet_register"),
+			tgbotapi.NewInlineKeyboardButtonData("📝 Пройти регистрацию", "cabinet_register"),
 		),
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("Назад", "ai_coach_main_menu"),
+			tgbotapi.NewInlineKeyboardButtonData("⬅️ Назад", "ai_coach_main_menu"),
 		),
 	)
 	if _, err := bot.Send(photo); err != nil {
@@ -58,7 +58,7 @@ func StartRegistration(bot *tgbotapi.BotAPI, chatID int64) {
 	msg := tgbotapi.NewMessage(chatID, "Шаг 1 из 3. Отправьте номер телефона (нажмите кнопку ниже или напишите в чат):")
 	keyboard := tgbotapi.NewReplyKeyboard(
 		tgbotapi.NewKeyboardButtonRow(
-			tgbotapi.NewKeyboardButtonContact("Отправить номер телефона"),
+			tgbotapi.NewKeyboardButtonContact("📲 Отправить номер телефона"),
 		),
 	)
 	keyboard.OneTimeKeyboard = true
@@ -146,12 +146,12 @@ func SendCabinetMenu(bot *tgbotapi.BotAPI, chatID int64, text string) {
 	if token == "" {
 		msg := tgbotapi.NewMessage(chatID, text)
 		msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
-			tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData("Редактировать профиль", "cabinet_profile")),
-			tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData("Мои разборы", "cabinet_my_reviews")),
-			tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData("Матрица по дате рождения", "cabinet_matrix")),
-			tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData("Цифра дня", "cabinet_number_day")),
-			tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData("Обучение", "cabinet_education")),
-			tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData("Перейти на главную", "ai_coach_main_menu")),
+			tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData("✏️ Редактировать профиль", "cabinet_profile")),
+			tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData("📂 Мои разборы", "cabinet_my_reviews")),
+			tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData("🧮 Матрица по дате рождения", "cabinet_matrix")),
+			tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData("🔢 Цифра дня", "cabinet_number_day")),
+			tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData("📚 Обучение", "cabinet_education")),
+			tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData("🏠 Перейти на главную", "ai_coach_main_menu")),
 		)
 		if _, err := bot.Send(msg); err != nil {
 			log.Printf("ERROR sending cabinet menu (fallback): %v", err)
@@ -162,23 +162,23 @@ func SendCabinetMenu(bot *tgbotapi.BotAPI, chatID int64, text string) {
 	replyMarkup := map[string]interface{}{
 		"inline_keyboard": [][]map[string]interface{}{
 			{
-				{"text": "Редактировать профиль", "callback_data": "cabinet_profile"},
+				{"text": "✏️ Редактировать профиль", "callback_data": "cabinet_profile"},
 			},
 			{
-				{"text": "Мои разборы", "callback_data": "cabinet_my_reviews"},
+				{"text": "📂 Мои разборы", "callback_data": "cabinet_my_reviews"},
 			},
 			{
-				{"text": "Матрица по дате рождения", "callback_data": "cabinet_matrix"},
+				{"text": "🧮 Матрица по дате рождения", "callback_data": "cabinet_matrix"},
 			},
 			{
 				// Здесь сразу Mini App «Цифра дня».
-				{"text": "Цифра дня", "web_app": map[string]string{"url": buttonURL}},
+				{"text": "🔢 Цифра дня", "web_app": map[string]string{"url": buttonURL}},
 			},
 			{
-				{"text": "Обучение", "callback_data": "cabinet_education"},
+				{"text": "📚 Обучение", "callback_data": "cabinet_education"},
 			},
 			{
-				{"text": "Перейти на главную", "callback_data": "ai_coach_main_menu"},
+				{"text": "🏠 Перейти на главную", "callback_data": "ai_coach_main_menu"},
 			},
 		},
 	}
@@ -215,13 +215,13 @@ func SendEditProfileMenu(bot *tgbotapi.BotAPI, chatID int64) {
 	msg := tgbotapi.NewMessage(chatID, "Что вы хотите изменить в профиле?")
 	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("Телефон", "cabinet_edit_phone"),
+			tgbotapi.NewInlineKeyboardButtonData("📞 Телефон", "cabinet_edit_phone"),
 		),
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("ФИО", "cabinet_edit_fio"),
+			tgbotapi.NewInlineKeyboardButtonData("👤 ФИО", "cabinet_edit_fio"),
 		),
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("Дата рождения", "cabinet_edit_birthdate"),
+			tgbotapi.NewInlineKeyboardButtonData("🎂 Дата рождения", "cabinet_edit_birthdate"),
 		),
 	)
 	if _, err := bot.Send(msg); err != nil {

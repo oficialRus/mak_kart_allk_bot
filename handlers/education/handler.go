@@ -19,8 +19,8 @@ func Handle(bot *tgbotapi.BotAPI, chatID int64) {
 	photo := tgbotapi.NewPhoto(chatID, tgbotapi.FileURL(educationPlaceholderURL))
 	photo.Caption = educationDescription
 	photo.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
-		tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData("Пройти опрос", "education_survey")),
-		tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData("Назад", "ai_coach_main_menu")),
+		tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData("📝 Пройти опрос", "education_survey")),
+		tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData("⬅️ Назад", "ai_coach_main_menu")),
 	)
 	if _, err := bot.Send(photo); err != nil {
 		log.Printf("ERROR sending education message: %v", err)
@@ -143,13 +143,13 @@ func sendSurveyQuestion1(bot *tgbotapi.BotAPI, chatID int64) {
 	msg := tgbotapi.NewMessage(chatID, text)
 	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("Новичок", "education_survey_q1_novice"),
+			tgbotapi.NewInlineKeyboardButtonData("🌱 Новичок", "education_survey_q1_novice"),
 		),
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("Средний", "education_survey_q1_middle"),
+			tgbotapi.NewInlineKeyboardButtonData("📈 Средний", "education_survey_q1_middle"),
 		),
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("Профессионал", "education_survey_q1_pro"),
+			tgbotapi.NewInlineKeyboardButtonData("⭐ Профессионал", "education_survey_q1_pro"),
 		),
 	)
 	if _, err := bot.Send(msg); err != nil {
@@ -162,8 +162,8 @@ func sendSurveyQuestion2(bot *tgbotapi.BotAPI, chatID int64) {
 	msg := tgbotapi.NewMessage(chatID, text)
 	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("Да", "education_survey_q2_yes"),
-			tgbotapi.NewInlineKeyboardButtonData("Нет", "education_survey_q2_no"),
+			tgbotapi.NewInlineKeyboardButtonData("✅ Да", "education_survey_q2_yes"),
+			tgbotapi.NewInlineKeyboardButtonData("❌ Нет", "education_survey_q2_no"),
 		),
 	)
 	if _, err := bot.Send(msg); err != nil {
@@ -176,19 +176,19 @@ func sendSurveyQuestion3(bot *tgbotapi.BotAPI, chatID int64) {
 	msg := tgbotapi.NewMessage(chatID, text)
 	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("Самопознание", "education_survey_q3_self"),
+			tgbotapi.NewInlineKeyboardButtonData("🔍 Самопознание", "education_survey_q3_self"),
 		),
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("Найти ответ на вопрос", "education_survey_q3_answer"),
+			tgbotapi.NewInlineKeyboardButtonData("💡 Найти ответ на вопрос", "education_survey_q3_answer"),
 		),
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("Решить проблему", "education_survey_q3_problem"),
+			tgbotapi.NewInlineKeyboardButtonData("🧩 Решить проблему", "education_survey_q3_problem"),
 		),
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("Мотивация на день", "education_survey_q3_motivation"),
+			tgbotapi.NewInlineKeyboardButtonData("⚡ Мотивация на день", "education_survey_q3_motivation"),
 		),
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("Другое", "education_survey_q3_other"),
+			tgbotapi.NewInlineKeyboardButtonData("➕ Другое", "education_survey_q3_other"),
 		),
 	)
 	if _, err := bot.Send(msg); err != nil {
@@ -200,10 +200,10 @@ func sendSurveyFinal(bot *tgbotapi.BotAPI, chatID int64, text string) {
 	msg := tgbotapi.NewMessage(chatID, text)
 	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("Вернуться в «Обучение»", "main_menu_education"),
+			tgbotapi.NewInlineKeyboardButtonData("📚 Вернуться в «Обучение»", "main_menu_education"),
 		),
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("Главное меню", "ai_coach_main_menu"),
+			tgbotapi.NewInlineKeyboardButtonData("🏠 Главное меню", "ai_coach_main_menu"),
 		),
 	)
 	if _, err := bot.Send(msg); err != nil {

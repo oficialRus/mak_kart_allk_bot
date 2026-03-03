@@ -77,7 +77,7 @@ func Handle(bot *tgbotapi.BotAPI, chatID int64) {
 	msg := tgbotapi.NewMessage(chatID, text)
 	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("Завершить диалог", "question_end"),
+			tgbotapi.NewInlineKeyboardButtonData("🛑 Завершить диалог", "question_end"),
 		),
 	)
 	if _, err := bot.Send(msg); err != nil {
@@ -158,7 +158,7 @@ func HandleUserMessage(bot *tgbotapi.BotAPI, chatID int64, userText string) bool
 	msg := tgbotapi.NewMessage(chatID, reply)
 	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("Завершить диалог", "question_end"),
+			tgbotapi.NewInlineKeyboardButtonData("🛑 Завершить диалог", "question_end"),
 		),
 	)
 	if _, err := bot.Send(msg); err != nil {
@@ -172,7 +172,7 @@ func sendFallback(bot *tgbotapi.BotAPI, chatID int64, text string) {
 	msg := tgbotapi.NewMessage(chatID, text)
 	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("Завершить диалог", "question_end"),
+			tgbotapi.NewInlineKeyboardButtonData("🛑 Завершить диалог", "question_end"),
 		),
 	)
 	if _, err := bot.Send(msg); err != nil {

@@ -111,11 +111,11 @@ func handleStart(bot *tgbotapi.BotAPI, chatID int64) {
 	msg := tgbotapi.NewMessage(chatID, "Здравствуйте! Мы рады вас видеть! Выберите одну из кнопок ниже.")
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("ИИ Психолог-Коуч", "ai_coach"),
+			tgbotapi.NewInlineKeyboardButtonData("🤖 ИИ Психолог-Коуч", "ai_coach"),
 		),
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("Обратная связь", "feedback"),
-			tgbotapi.NewInlineKeyboardButtonData("Подарок", "gift"),
+			tgbotapi.NewInlineKeyboardButtonData("📨 Обратная связь", "feedback"),
+			tgbotapi.NewInlineKeyboardButtonData("🎁 Подарок", "gift"),
 		),
 	)
 	msg.ReplyMarkup = keyboard
@@ -153,10 +153,10 @@ func handleCallback(bot *tgbotapi.BotAPI, q *tgbotapi.CallbackQuery, miniappURL,
 		msg := tgbotapi.NewMessage(chatID, text)
 		msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
 			tgbotapi.NewInlineKeyboardRow(
-				tgbotapi.NewInlineKeyboardButtonURL("Написать в Telegram", feedbackURL),
+				tgbotapi.NewInlineKeyboardButtonURL("✉️ Написать в Telegram", feedbackURL),
 			),
 			tgbotapi.NewInlineKeyboardRow(
-				tgbotapi.NewInlineKeyboardButtonData("Главное меню", "ai_coach_main_menu"),
+				tgbotapi.NewInlineKeyboardButtonData("🏠 Главное меню", "ai_coach_main_menu"),
 			),
 		)
 		if _, err := bot.Send(msg); err != nil {
@@ -264,18 +264,18 @@ func handleCallback(bot *tgbotapi.BotAPI, q *tgbotapi.CallbackQuery, miniappURL,
 		replyMarkup := map[string]interface{}{
 			"inline_keyboard": [][]map[string]interface{}{
 				{
-					{"text": "Вопрос", "callback_data": "ai_coach_question"},
-					{"text": "Техника", "callback_data": "ai_coach_technique"},
+					{"text": "❓ Вопрос", "callback_data": "ai_coach_question"},
+					{"text": "🧩 Техника", "callback_data": "ai_coach_technique"},
 				},
 				{
-					{"text": "Расшифровка карты", "callback_data": "ai_coach_card_decode"},
+					{"text": "🃏 Расшифровка карты", "callback_data": "ai_coach_card_decode"},
 				},
 				{
-					{"text": "Карта дня", "callback_data": "ai_coach_card_day"},
-					{"text": "Цифра дня", "web_app": map[string]string{"url": buttonURL}},
+					{"text": "🗓️ Карта дня", "callback_data": "ai_coach_card_day"},
+					{"text": "🔢 Цифра дня", "web_app": map[string]string{"url": buttonURL}},
 				},
 				{
-					{"text": "Главное меню", "callback_data": "ai_coach_main_menu"},
+					{"text": "🏠 Главное меню", "callback_data": "ai_coach_main_menu"},
 				},
 			},
 		}
@@ -321,8 +321,8 @@ func sendGiftMessage(_ *tgbotapi.BotAPI, chatID int64, miniappURL, token string)
 	}
 	replyMarkup := map[string]interface{}{
 		"inline_keyboard": [][]map[string]interface{}{
-			{{"text": "Цифра дня", "web_app": map[string]string{"url": buttonURL}}},
-			{{"text": "Далее", "callback_data": "gift_next"}},
+			{{"text": "🔢 Цифра дня", "web_app": map[string]string{"url": buttonURL}}},
+			{{"text": "➡️ Далее", "callback_data": "gift_next"}},
 		},
 	}
 	markupJSON, _ := json.Marshal(replyMarkup)
@@ -367,10 +367,10 @@ func sendAiCoachWelcome(_ *tgbotapi.BotAPI, chatID int64, token, miniappURL stri
 	}
 	replyMarkup := map[string]interface{}{
 		"inline_keyboard": [][]map[string]interface{}{
-			{{"text": "Вопрос", "callback_data": "ai_coach_question"}, {"text": "Техника", "callback_data": "ai_coach_technique"}},
-			{{"text": "Расшифровка карты", "callback_data": "ai_coach_card_decode"}},
-			{{"text": "Карта дня", "callback_data": "ai_coach_card_day"}, {"text": "Цифра дня", "web_app": map[string]string{"url": buttonURL}}},
-			{{"text": "Главное меню", "callback_data": "ai_coach_main_menu"}},
+			{{"text": "❓ Вопрос", "callback_data": "ai_coach_question"}, {"text": "🧩 Техника", "callback_data": "ai_coach_technique"}},
+			{{"text": "🃏 Расшифровка карты", "callback_data": "ai_coach_card_decode"}},
+			{{"text": "🗓️ Карта дня", "callback_data": "ai_coach_card_day"}, {"text": "🔢 Цифра дня", "web_app": map[string]string{"url": buttonURL}}},
+			{{"text": "🏠 Главное меню", "callback_data": "ai_coach_main_menu"}},
 		},
 	}
 	markupJSON, _ := json.Marshal(replyMarkup)

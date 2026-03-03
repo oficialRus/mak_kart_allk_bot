@@ -27,15 +27,15 @@ func Handle(_ *tgbotapi.BotAPI, chatID int64, miniappURL, token string) {
 
 	replyMarkup := map[string]interface{}{
 		"inline_keyboard": [][]map[string]interface{}{
-			{{"text": "ИИ-психолог Коуч", "callback_data": "main_menu_ai"}},
-			{{"text": "Цифра дня", "web_app": map[string]string{"url": buttonURL}}},
+			{{"text": "🤖 ИИ-психолог Коуч", "callback_data": "main_menu_ai"}},
+			{{"text": "🔢 Цифра дня", "web_app": map[string]string{"url": buttonURL}}},
 			{
-				{"text": "Обучение", "callback_data": "main_menu_education"},
-				{"text": "Контакты", "callback_data": "main_menu_contacts"},
+				{"text": "📚 Обучение", "callback_data": "main_menu_education"},
+				{"text": "📇 Контакты", "callback_data": "main_menu_contacts"},
 			},
 			{
-				{"text": "Магазин", "callback_data": "main_menu_shop"},
-				{"text": "Личный кабинет", "callback_data": "main_menu_cabinet"},
+				{"text": "🛒 Магазин", "callback_data": "main_menu_shop"},
+				{"text": "👤 Личный кабинет", "callback_data": "main_menu_cabinet"},
 			},
 		},
 	}

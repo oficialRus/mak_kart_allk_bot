@@ -26,10 +26,10 @@ func Handle(bot *tgbotapi.BotAPI, chatID int64) {
 	photo.Caption = shopCaption
 	photo.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonURL("Перейти в магазин", shopURL),
+			tgbotapi.NewInlineKeyboardButtonURL("🛒 Перейти в магазин", shopURL),
 		),
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("Главное меню", "ai_coach_main_menu"),
+			tgbotapi.NewInlineKeyboardButtonData("🏠 Главное меню", "ai_coach_main_menu"),
 		),
 	)
 	if _, err := bot.Send(photo); err != nil {
