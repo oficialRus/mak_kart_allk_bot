@@ -108,7 +108,7 @@ func main() {
 }
 
 func handleStart(bot *tgbotapi.BotAPI, chatID int64) {
-	msg := tgbotapi.NewMessage(chatID, "Здравствуйте! Мы рады вас видеть! Выберите одну из кнопок ниже.")
+	msg := tgbotapi.NewMessage(chatID, "Привет! Я ваш личный бот‑психолог и коуч.\n\nЯ помогаю:\n— работать с ассоциативными и метафорическими картами\n— разбираться в ваших состояниях через вопросы и подсказки\n— использовать подходы цифровой психологии для самопознания\n\nВыберите одну из кнопок ниже, чтобы продолжить.")
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData("🤖 ИИ Психолог-Коуч", "ai_coach"),
@@ -148,12 +148,44 @@ func handleCallback(bot *tgbotapi.BotAPI, q *tgbotapi.CallbackQuery, miniappURL,
 	}
 
 	switch q.Data {
-	case "feedback", "main_menu_contacts":
+	case "feedback":
 		text := "У вас возникла проблема с товаром или есть другой вопрос? Напишите сюда — решим ваш вопрос:\n\n" + feedbackURL
 		msg := tgbotapi.NewMessage(chatID, text)
 		msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
 			tgbotapi.NewInlineKeyboardRow(
 				tgbotapi.NewInlineKeyboardButtonURL("✉️ Написать в Telegram", feedbackURL),
+			),
+			tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonData("📧 garmonia-mak@yandex.ru", "feedback_email"),
+			),
+			tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonData("💬 Пожелания по работе бота и карт", "feedback_suggestions"),
+			),
+			tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonData("⬅️ Назад", "ai_coach_back"),
+			),
+			tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonData("🏠 Главное меню", "ai_coach_main_menu"),
+			),
+		)
+		if _, err := bot.Send(msg); err != nil {
+			log.Printf("ERROR sending feedback message: %v", err)
+		}
+	case "main_menu_contacts":
+		text := "У вас возникла проблема с товаром или есть другой вопрос? Напишите сюда — решим ваш вопрос:\n\n" + feedbackURL
+		msg := tgbotapi.NewMessage(chatID, text)
+		msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
+			tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonURL("✉️ Написать в Telegram", feedbackURL),
+			),
+			tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonData("📧 garmonia-mak@yandex.ru", "feedback_email"),
+			),
+			tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonData("💬 Пожелания по работе бота и карт", "feedback_suggestions"),
+			),
+			tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonData("⬅️ Назад", "ai_coach_main_menu"),
 			),
 			tgbotapi.NewInlineKeyboardRow(
 				tgbotapi.NewInlineKeyboardButtonData("🏠 Главное меню", "ai_coach_main_menu"),
@@ -252,6 +284,26 @@ func handleCallback(bot *tgbotapi.BotAPI, q *tgbotapi.CallbackQuery, miniappURL,
 		cabinet.SendCabinetMenu(bot, chatID, "Изменение ФИО пока в разработке. Сейчас изменить данные можно через поддержку.")
 	case "cabinet_edit_birthdate":
 		cabinet.SendCabinetMenu(bot, chatID, "Изменение даты рождения пока в разработке. Сейчас изменить данные можно через поддержку.")
+	case "feedback_email":
+		emailMsg := tgbotapi.NewMessage(chatID, "Вы можете написать нам на электронную почту:\n\n📧 garmonia-mak@yandex.ru")
+		emailMsg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
+			tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonData("🏠 Главное меню", "ai_coach_main_menu"),
+			),
+		)
+		if _, err := bot.Send(emailMsg); err != nil {
+			log.Printf("ERROR sending feedback email message: %v", err)
+		}
+	case "feedback_suggestions":
+		msg := tgbotapi.NewMessage(chatID, "Поделитесь, пожалуйста, вашими пожеланиями или вопросами по работе бота и метафорических карт.\n\nПросто напишите их следующим сообщением в чат.")
+		msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
+			tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonData("🏠 Главное меню", "ai_coach_main_menu"),
+			),
+		)
+		if _, err := bot.Send(msg); err != nil {
+			log.Printf("ERROR sending feedback suggestions message: %v", err)
+		}
 	case "question_end":
 		question.EndSession(chatID)
 
