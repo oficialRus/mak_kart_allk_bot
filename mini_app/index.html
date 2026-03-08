@@ -2,8 +2,27 @@
 <html lang="ru">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Рулетка дня</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script>
+      (function() {
+        function expand() {
+          var w = window.Telegram && window.Telegram.WebApp;
+          if (w) {
+            w.ready();
+            if (!w.isExpanded) w.expand();
+            if (w.requestFullscreen) w.requestFullscreen();
+          }
+        }
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', expand);
+        } else {
+          expand();
+        }
+        window.addEventListener('load', expand);
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -71,52 +71,48 @@ export default function App() {
         WebApp?: {
           ready?: () => void;
           expand?: () => void;
-          viewport?: {
-            isExpanded?: boolean;
-          };
+          requestFullscreen?: () => void | Promise<unknown>;
+          viewport?: { isExpanded?: boolean };
         };
       };
     };
-
     const webApp = w.Telegram?.WebApp;
-    if (!webApp) {
-      // Если мини‑приложение открыто не через Telegram, пробуем только SDK.
-      if (expandViewport.isAvailable()) {
-        expandViewport();
+
+    function doExpand() {
+      try {
+        webApp?.ready?.();
+        if (webApp && !webApp.viewport?.isExpanded) webApp.expand?.();
+        if (expandViewport.isAvailable()) expandViewport();
+      } catch {
+        // ignore
       }
-      (async () => {
-        if (requestFullscreen.isAvailable()) {
-          try {
-            await requestFullscreen();
-          } catch {
-            // ignore
-          }
-        }
-      })();
+    }
+    function doFullscreen() {
+      try {
+        if (webApp?.requestFullscreen) (webApp.requestFullscreen as () => Promise<unknown>)?.();
+        if (requestFullscreen.isAvailable()) requestFullscreen().catch(() => {});
+      } catch {
+        // ignore
+      }
+    }
+
+    if (!webApp) {
+      if (expandViewport.isAvailable()) expandViewport();
+      if (requestFullscreen.isAvailable()) requestFullscreen().catch(() => {});
       return;
     }
 
-    try {
-      webApp.ready?.();
-      if (!webApp.viewport?.isExpanded) {
-        webApp.expand?.();
-      }
-      // Дополнительно просим полноэкранный режим через SDK, если доступно.
-      if (expandViewport.isAvailable()) {
-        expandViewport();
-      }
-      (async () => {
-        if (requestFullscreen.isAvailable()) {
-          try {
-            await requestFullscreen();
-          } catch {
-            // ignore
-          }
-        }
-      })();
-    } catch {
-      // игнорируем ошибки и продолжаем работу мини‑приложения
-    }
+    doExpand();
+    doFullscreen();
+    requestAnimationFrame(() => {
+      doExpand();
+      doFullscreen();
+    });
+    const t = window.setTimeout(() => {
+      doExpand();
+      doFullscreen();
+    }, 300);
+    return () => clearTimeout(t);
   }, []);
 
   const resultNumber = winningIndex === null ? "-" : NUMBERS[winningIndex];
