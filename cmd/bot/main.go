@@ -364,7 +364,7 @@ func handleCallback(bot *tgbotapi.BotAPI, q *tgbotapi.CallbackQuery, miniappURL,
 	_, _ = bot.Request(tgbotapi.NewCallback(callbackID, ""))
 }
 
-// Единственное место, откуда берётся картинка для кнопки «Подарок».
+// Картинка «Подарок» — только с диска. В этом коде нет отправки по URL (заглушек нет).
 const giftImageDir = "/opt/mak_kart_allk_bot/cmd/bot/images"
 const giftImageName = "number_day.png"
 
@@ -389,7 +389,7 @@ func sendGiftMessage(bot *tgbotapi.BotAPI, chatID int64, miniappURL, token strin
 			log.Printf("ERROR gift: не удалось открыть %q: %v", giftPath, err)
 		} else {
 			defer f.Close()
-			log.Printf("gift: отправляю картинку %s", giftPath)
+			log.Printf("gift: ОТПРАВЛЯЮ КАРТИНКУ С ДИСКА (не заглушка): %s", giftPath)
 			body := &bytes.Buffer{}
 			w := multipart.NewWriter(body)
 			_ = w.WriteField("chat_id", strconv.FormatInt(chatID, 10))
@@ -419,8 +419,8 @@ func sendGiftMessage(bot *tgbotapi.BotAPI, chatID int64, miniappURL, token strin
 		}
 	}
 
-	// Файл не найден — отправляем только текст и кнопки.
-	log.Printf("WARNING gift: файл не найден %s", giftPath)
+	// Файл не найден — только текст (без картинки). Заглушки по URL в коде нет.
+	log.Printf("WARNING gift: файл не найден, отправляю ТОЛЬКО ТЕКСТ (без фото): %s", giftPath)
 	body := &bytes.Buffer{}
 	w := multipart.NewWriter(body)
 	_ = w.WriteField("chat_id", strconv.FormatInt(chatID, 10))
@@ -445,13 +445,8 @@ func sendGiftMessage(bot *tgbotapi.BotAPI, chatID int64, miniappURL, token strin
 	}
 }
 
-// Главное меню после «Далее»: ИИ-психолог Коуч первым, затем Мини рулетка, Обучение, Контакты, Магазин, Назад.
-// Приветственное сообщение после «Далее» в разделе ИИ Психолог-Коуч — фото с подписью и кнопками.
+// Приветственное сообщение раздела ИИ Психолог-Коуч — только текст и кнопки (без картинки-заглушки).
 func sendAiCoachWelcome(_ *tgbotapi.BotAPI, chatID int64, token, miniappURL string) {
-	imageURL := strings.TrimSpace(os.Getenv("AI_COACH_WELCOME_IMAGE"))
-	if imageURL == "" {
-		imageURL = aiCoachWelcomeImageURL
-	}
 	buttonURL := miniappURL
 	if strings.Contains(miniappURL, "localhost") {
 		buttonURL = "https://example.com"
@@ -469,12 +464,11 @@ func sendAiCoachWelcome(_ *tgbotapi.BotAPI, chatID int64, token, miniappURL stri
 	body := &bytes.Buffer{}
 	w := multipart.NewWriter(body)
 	_ = w.WriteField("chat_id", strconv.FormatInt(chatID, 10))
-	_ = w.WriteField("photo", imageURL)
-	_ = w.WriteField("caption", aiCoachWelcomeText)
+	_ = w.WriteField("text", aiCoachWelcomeText)
 	_ = w.WriteField("reply_markup", string(markupJSON))
 	_ = w.Close()
 
-	req, err := http.NewRequest(http.MethodPost, "https://api.telegram.org/bot"+token+"/sendPhoto", body)
+	req, err := http.NewRequest(http.MethodPost, "https://api.telegram.org/bot"+token+"/sendMessage", body)
 	if err != nil {
 		log.Printf("ERROR sendAiCoachWelcome request: %v", err)
 		return
@@ -489,7 +483,7 @@ func sendAiCoachWelcome(_ *tgbotapi.BotAPI, chatID int64, token, miniappURL stri
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		b, _ := io.ReadAll(resp.Body)
-		log.Printf("ERROR sendPhoto (ai_coach welcome) response: %d %s", resp.StatusCode, string(b))
+		log.Printf("ERROR sendMessage (ai_coach welcome) response: %d %s", resp.StatusCode, string(b))
 	}
 }
 
