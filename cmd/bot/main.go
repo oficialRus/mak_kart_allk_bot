@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	_ "embed"
 	"encoding/json"
 	"io"
 	"log"
@@ -129,20 +128,12 @@ func handleStart(bot *tgbotapi.BotAPI, chatID int64) {
 	log.Printf("Sent start message to chat %d", chatID)
 }
 
-// Картинка для кнопки «Подарок» встроена в бинарник — на сервере не нужна папка assets.
-//
-//go:embed gift.png
-var embedGiftImage []byte
-
 const (
-	feedbackURL            = "https://t.me/RyslanNovikov"
-	giftImageURL           = "https://placehold.co/600x400/eee/333/png?text=Подарок+от+психолога" // заглушка, если нет встроенной картинки
-	giftCaption            = "🎁 Ваш подарок от психолога — короткий тест, который поможет лучше понять себя. Нажмите «Цифра дня» или перейдите далее."
-	giftImagePath          = "assets/gift.png" // для поиска файла на диске (если не используем embed)
+	feedbackURL = "https://t.me/RyslanNovikov"
+	giftText    = "🎁 Ваш подарок от психолога — короткий тест, который поможет лучше понять себя. Нажмите «Цифра дня» или перейдите далее."
 	giftWhyText            = "Этот тест помогает определить ваш текущий уровень и подобрать подходящие материалы. Займёт пару минут и даст персональную рекомендацию."
 	aiCoachIntroText       = "ИИ Психолог-Коуч — это цифровой аналитик вашего мышления.\nОн помогает увидеть скрытые смыслы через ассоциации, метафоры и персональные числовые структуры.\n\nВы можете:\n— загрузить карту и разобрать её значение\n— описать свою ситуацию и получить направляющие вопросы\n— узнать свою цифру дня\n— получить персональный числовой разбор по дате рождения"
-	aiCoachWelcomeText     = "Для работы с ботом выберите раздел (кнопку ниже) от ИИ Психолога. Если вы не знаете, что выбрать — опишите свою задачу и напишите прямо сейчас в чат. Наш консультант поможет с выбором."
-	aiCoachWelcomeImageURL = "https://placehold.co/600x400/1a1a2e/eee/png?text=ИИ+Психолог-Коуч" // заглушка; можно заменить на свой URL или задать через .env
+	aiCoachWelcomeText = "Для работы с ботом выберите раздел (кнопку ниже) от ИИ Психолога. Если вы не знаете, что выбрать — опишите свою задачу и напишите прямо сейчас в чат. Наш консультант поможет с выбором."
 )
 
 func handleCallback(bot *tgbotapi.BotAPI, q *tgbotapi.CallbackQuery, miniappURL, token string) {
@@ -373,44 +364,11 @@ func handleCallback(bot *tgbotapi.BotAPI, q *tgbotapi.CallbackQuery, miniappURL,
 	_, _ = bot.Request(tgbotapi.NewCallback(callbackID, ""))
 }
 
-// giftImagePathForSend возвращает путь к файлу картинки подарка. Проверяет: env GIFT_IMAGE_PATH, путь от go.mod, от исполняемого файла, затем cwd.
-func giftImagePathForSend() string {
-	if p := strings.TrimSpace(os.Getenv("GIFT_IMAGE_PATH")); p != "" {
-		if _, err := os.Stat(p); err == nil {
-			return p
-		}
-	}
-	// Ищем корень проекта по go.mod (работает и при go run)
-	wd, _ := os.Getwd()
-	for d := wd; d != "" && d != "/"; d = filepath.Dir(d) {
-		if _, err := os.Stat(filepath.Join(d, "go.mod")); err == nil {
-			p := filepath.Join(d, "assets", "gift.png")
-			if _, err := os.Stat(p); err == nil {
-				return p
-			}
-			break
-		}
-	}
-	execPath, err := os.Executable()
-	if err == nil {
-		execDir := filepath.Dir(execPath)
-		for _, rel := range []string{"assets/gift.png", "../assets/gift.png"} {
-			p := filepath.Join(execDir, rel)
-			if _, err := os.Stat(p); err == nil {
-				return p
-			}
-		}
-	}
-	for _, p := range []string{giftImagePath, "../" + giftImagePath} {
-		if _, err := os.Stat(p); err == nil {
-			return p
-		}
-	}
-	return ""
-}
+// Единственное место, откуда берётся картинка для кнопки «Подарок».
+const giftImageDir = "/opt/mak_kart_allk_bot/cmd/bot/images"
+const giftImageName = "number_day.png"
 
-// Под фото — две кнопки: «Открыть тест», «Далее». Картинка берётся из assets/gift.png, если файл есть.
-func sendGiftMessage(_ *tgbotapi.BotAPI, chatID int64, miniappURL, token string) {
+func sendGiftMessage(bot *tgbotapi.BotAPI, chatID int64, miniappURL, token string) {
 	buttonURL := miniappURL
 	if strings.Contains(miniappURL, "localhost") {
 		buttonURL = "https://example.com"
@@ -423,46 +381,58 @@ func sendGiftMessage(_ *tgbotapi.BotAPI, chatID int64, miniappURL, token string)
 	}
 	markupJSON, _ := json.Marshal(replyMarkup)
 
-	body := &bytes.Buffer{}
-	w := multipart.NewWriter(body)
-	_ = w.WriteField("chat_id", strconv.FormatInt(chatID, 10))
+	giftPath := filepath.Join(giftImageDir, giftImageName)
 
-	// Сначала встроенная в бинарник картинка (всегда есть после go build)
-	if len(embedGiftImage) > 0 {
-		part, _ := w.CreateFormFile("photo", "gift.png")
-		_, _ = part.Write(embedGiftImage)
-	} else {
-		// Иначе ищем файл на диске (go run или GIFT_IMAGE_PATH)
-		imagePath := giftImagePathForSend()
-		if imagePath != "" {
-			f, err := os.Open(imagePath)
-			if err == nil {
-				log.Printf("GIFT: отправляю картинку из %s", imagePath)
-				part, _ := w.CreateFormFile("photo", "gift.png")
-				_, _ = io.Copy(part, f)
-				_ = f.Close()
-			} else {
-				log.Printf("GIFT: не удалось открыть %s: %v, заглушка", imagePath, err)
-				_ = w.WriteField("photo", giftImageURL)
-			}
+	if giftPath != "" {
+		f, err := os.Open(giftPath)
+		if err != nil {
+			log.Printf("ERROR gift: не удалось открыть %q: %v", giftPath, err)
 		} else {
-			cwd, _ := os.Getwd()
-			log.Printf("GIFT: картинка не найдена (cwd=%s), заглушка", cwd)
-			_ = w.WriteField("photo", giftImageURL)
+			defer f.Close()
+			log.Printf("gift: отправляю картинку %s", giftPath)
+			body := &bytes.Buffer{}
+			w := multipart.NewWriter(body)
+			_ = w.WriteField("chat_id", strconv.FormatInt(chatID, 10))
+			part, _ := w.CreateFormFile("photo", giftImageName)
+			_, _ = io.Copy(part, f)
+			_ = w.WriteField("caption", giftText)
+			_ = w.WriteField("reply_markup", string(markupJSON))
+			_ = w.Close()
+			req, err := http.NewRequest(http.MethodPost, "https://api.telegram.org/bot"+token+"/sendPhoto", body)
+			if err != nil {
+				log.Printf("ERROR sendGiftMessage request: %v", err)
+				return
+			}
+			req.Header.Set("Content-Type", "multipart/form-data; boundary="+w.Boundary())
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				log.Printf("ERROR sendGiftMessage: %v", err)
+				return
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode == http.StatusOK {
+				return
+			}
+			b, _ := io.ReadAll(resp.Body)
+			log.Printf("ERROR sendPhoto (gift) response: %d %s", resp.StatusCode, string(b))
+			return
 		}
 	}
 
-	_ = w.WriteField("caption", giftCaption)
+	// Файл не найден — отправляем только текст и кнопки.
+	log.Printf("WARNING gift: файл не найден %s", giftPath)
+	body := &bytes.Buffer{}
+	w := multipart.NewWriter(body)
+	_ = w.WriteField("chat_id", strconv.FormatInt(chatID, 10))
+	_ = w.WriteField("text", giftText)
 	_ = w.WriteField("reply_markup", string(markupJSON))
 	_ = w.Close()
-
-	req, err := http.NewRequest(http.MethodPost, "https://api.telegram.org/bot"+token+"/sendPhoto", body)
+	req, err := http.NewRequest(http.MethodPost, "https://api.telegram.org/bot"+token+"/sendMessage", body)
 	if err != nil {
 		log.Printf("ERROR sendGiftMessage request: %v", err)
 		return
 	}
 	req.Header.Set("Content-Type", "multipart/form-data; boundary="+w.Boundary())
-
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		log.Printf("ERROR sendGiftMessage: %v", err)
@@ -471,7 +441,7 @@ func sendGiftMessage(_ *tgbotapi.BotAPI, chatID int64, miniappURL, token string)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		b, _ := io.ReadAll(resp.Body)
-		log.Printf("ERROR sendPhoto response: %d %s", resp.StatusCode, string(b))
+		log.Printf("ERROR sendMessage (gift) response: %d %s", resp.StatusCode, string(b))
 	}
 }
 
