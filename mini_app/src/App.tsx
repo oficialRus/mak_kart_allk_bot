@@ -13,6 +13,8 @@ const RIM_OUTER_R = 48;
 const WHEEL_OUTER_R = RIM_OUTER_R;
 const RIM_INNER_R = 42;
 const INNER_RING_R = 20; // тонкое кольцо вокруг центра
+const CENTER_CORE_RING_R = 11;
+const NUMBER_RADIUS = 26; // числа чуть ближе к центру
 const SEGMENT_BORDER_STROKE = 0.35;
 const toRad = (deg: number) => (deg * Math.PI) / 180;
 
@@ -34,30 +36,29 @@ function numberPosition(i: number, r: number) {
   return polar(CX, CY, r, deg);
 }
 
-const RIM_MID_R = (RIM_INNER_R + RIM_OUTER_R) / 2;
-const RIM_STROKE_WIDTH = RIM_OUTER_R - RIM_INNER_R;
+// Внешнее тонкое золотое кольцо
+const OUTER_RING_R = 47.8;
+const OUTER_RING_STROKE = 0.55;
 
-// Палитра: тёмно-синие градиенты, низкий контраст (компас, не рулетка)
+// Палитра: тёмно-синие градиенты, очень низкий контраст (плавные переходы)
 const SEGMENT_GRADIENTS = [
-  { from: "#0f1629", to: "#151f35" },
-  { from: "#0d1526", to: "#131c32" },
-  { from: "#111a2e", to: "#172138" },
-  { from: "#0b132b", to: "#121b30" },
-  { from: "#0e1728", to: "#141d33" },
-  { from: "#0c1427", to: "#131b31" },
-  { from: "#0b132b", to: "#111a2e" },
-  { from: "#0f1629", to: "#151f35" },
-  { from: "#10182c", to: "#161e36" },
+  { from: "#0d1629", to: "#0f182c" },
+  { from: "#0c1528", to: "#0e172b" },
+  { from: "#0d1629", to: "#0f182d" },
+  { from: "#0b132b", to: "#0d1629" },
+  { from: "#0c1528", to: "#0e172b" },
+  { from: "#0c1428", to: "#0e172b" },
+  { from: "#0b132b", to: "#0d1629" },
+  { from: "#0d1629", to: "#0f182c" },
+  { from: "#0c1529", to: "#0e172c" },
 ];
 
-const NUMBER_COLOR = "#E8DCC0"; // тёплый беж
+const NUMBER_COLOR = "#E8DCC0";
 const ACCENT_GOLD = "#C9A96E";
 
-// Тики компаса: основные на границах секторов, второстепенные — посередине
-const TICK_MAIN_INNER_R = 44;
-const TICK_MAIN_OUTER_R = 48;
-const TICK_SECOND_INNER_R = 45;
-const TICK_SECOND_OUTER_R = 47;
+// Мелкие тики компаса по внешнему кольцу (на границах секторов)
+const TICK_INNER_R = 46.2;
+const TICK_OUTER_R = 47.8;
 
 export default function App() {
   const [rotation, setRotation] = useState(0);
@@ -143,7 +144,13 @@ export default function App() {
 
   return (
     <main className="page">
+      <header className="app-header">
+        <img src="/logo.png" alt="Гармония-Мак — Самопознание" className="app-logo" />
+      </header>
       <section className="roulette-card">
+        <p className="compass-promo">
+          Нажми «Крутить» — и узнай свою цифру дня
+        </p>
         <div className="wheel-area">
           <div className="pointer" aria-hidden="true" />
 
@@ -177,15 +184,15 @@ export default function App() {
                       </linearGradient>
                     );
                   })}
-                  {/* Свечение центра — точка интуиции */}
+                  {/* Мягкое свечение центра — премиальное медитативное ощущение */}
                   <radialGradient id="centerGlow" cx="50%" cy="50%" r="50%">
-                    <stop offset="0%" stopColor="#E8DCC0" stopOpacity="0.95" />
-                    <stop offset="30%" stopColor={ACCENT_GOLD} stopOpacity="0.5" />
-                    <stop offset="70%" stopColor={ACCENT_GOLD} stopOpacity="0.15" />
+                    <stop offset="0%" stopColor="#E8DCC0" stopOpacity="0.85" />
+                    <stop offset="28%" stopColor={ACCENT_GOLD} stopOpacity="0.4" />
+                    <stop offset="60%" stopColor={ACCENT_GOLD} stopOpacity="0.12" />
                     <stop offset="100%" stopColor="#0B132B" stopOpacity="0" />
                   </radialGradient>
-                  <filter id="centerGlowFilter" x="-50%" y="-50%" width="200%" height="200%">
-                    <feGaussianBlur in="SourceGraphic" stdDeviation="1.5" result="blur" />
+                  <filter id="centerGlowFilter" x="-80%" y="-80%" width="260%" height="260%">
+                    <feGaussianBlur in="SourceGraphic" stdDeviation="3.2" result="blur" />
                     <feMerge>
                       <feMergeNode in="blur" />
                       <feMergeNode in="SourceGraphic" />
@@ -193,18 +200,18 @@ export default function App() {
                   </filter>
                 </defs>
 
-                {/* Секторы компаса (направления 1–9) */}
+                {/* Секторы компаса (9 равных направлений), плавные переходы */}
                 {NUMBERS.map((n, i) => (
                   <path
                     key={i}
                     d={segmentPath(i)}
                     fill={`url(#segmentGrad-${i})`}
-                    stroke="rgba(201, 169, 110, 0.12)"
-                    strokeWidth={SEGMENT_BORDER_STROKE}
+                    stroke="rgba(201, 169, 110, 0.08)"
+                    strokeWidth={0.25}
                   />
                 ))}
 
-                {/* Радиальные линии навигации от центра */}
+                {/* Тонкие радиальные линии навигации (только основные) */}
                 {NUMBERS.map((_, i) => {
                   const angle = -90 + i * SECTOR_ANGLE;
                   const outer = polar(CX, CY, WHEEL_OUTER_R, angle);
@@ -215,17 +222,17 @@ export default function App() {
                       y1={CY}
                       x2={outer.x}
                       y2={outer.y}
-                      stroke="rgba(201, 169, 110, 0.18)"
-                      strokeWidth={0.25}
+                      stroke="rgba(201, 169, 110, 0.14)"
+                      strokeWidth={0.2}
                     />
                   );
                 })}
 
-                {/* Основные тики компаса на границах секторов */}
+                {/* Мелкие тики компаса по внешнему кольцу */}
                 {NUMBERS.map((_, i) => {
                   const angle = -90 + i * SECTOR_ANGLE;
-                  const inner = polar(CX, CY, TICK_MAIN_INNER_R, angle);
-                  const outer = polar(CX, CY, TICK_MAIN_OUTER_R, angle);
+                  const inner = polar(CX, CY, TICK_INNER_R, angle);
+                  const outer = polar(CX, CY, TICK_OUTER_R, angle);
                   return (
                     <line
                       key={`tick-${i}`}
@@ -233,32 +240,15 @@ export default function App() {
                       y1={inner.y}
                       x2={outer.x}
                       y2={outer.y}
-                      stroke="rgba(201, 169, 110, 0.35)"
-                      strokeWidth={0.5}
-                    />
-                  );
-                })}
-                {/* Второстепенные тонкие разделители (между секторами) */}
-                {NUMBERS.map((_, i) => {
-                  const angle = -90 + (i + 0.5) * SECTOR_ANGLE;
-                  const inner = polar(CX, CY, TICK_SECOND_INNER_R, angle);
-                  const outer = polar(CX, CY, TICK_SECOND_OUTER_R, angle);
-                  return (
-                    <line
-                      key={`tick-sec-${i}`}
-                      x1={inner.x}
-                      y1={inner.y}
-                      x2={outer.x}
-                      y2={outer.y}
-                      stroke="rgba(201, 169, 110, 0.15)"
-                      strokeWidth={0.3}
+                      stroke="rgba(201, 169, 110, 0.38)"
+                      strokeWidth={0.4}
                     />
                   );
                 })}
 
-                {/* Числа — тёплый беж */}
+                {/* Числа: чуть ближе к центру, крупнее (+15–20%), минимальная типографика */}
                 {NUMBERS.map((n, i) => {
-                  const pos = numberPosition(i, 33);
+                  const pos = numberPosition(i, NUMBER_RADIUS);
                   return (
                     <text
                       key={i}
@@ -267,41 +257,42 @@ export default function App() {
                       textAnchor="middle"
                       dominantBaseline="central"
                       fill={NUMBER_COLOR}
-                      fontSize="7"
-                      fontWeight="600"
+                      fontSize="7.8"
+                      fontWeight="500"
                       fontFamily="system-ui, -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif"
+                      style={{ letterSpacing: "0.02em" }}
                     >
                       {n}
                     </text>
                   );
                 })}
 
-                {/* Внешнее тонкое кольцо */}
+                {/* Внешнее тонкое золотое кольцо */}
                 <circle
                   cx={CX}
                   cy={CY}
-                  r={RIM_MID_R}
+                  r={OUTER_RING_R}
                   fill="none"
                   stroke={ACCENT_GOLD}
-                  strokeWidth={RIM_STROKE_WIDTH}
+                  strokeWidth={OUTER_RING_STROKE}
                   strokeLinejoin="round"
-                  opacity={0.4}
+                  opacity={0.5}
                 />
 
-                {/* Тонкое внутреннее кольцо вокруг центра */}
+                {/* Тонкое кольцо вокруг центра */}
                 <circle
                   cx={CX}
                   cy={CY}
                   r={INNER_RING_R}
                   fill="none"
-                  stroke="rgba(201, 169, 110, 0.35)"
-                  strokeWidth={0.5}
+                  stroke="rgba(201, 169, 110, 0.28)"
+                  strokeWidth={0.45}
                 />
 
-                {/* Центр: светящаяся точка интуиции + радиальные лучи */}
+                {/* Центр: мягкое свечение + тонкое кольцо вокруг ядра + лёгкие радиальные лучи */}
                 <g filter="url(#centerGlowFilter)">
                   {[0, 45, 90, 135, 180, 225, 270, 315].map((deg) => {
-                    const end = polar(CX, CY, 16, deg);
+                    const end = polar(CX, CY, 14, deg);
                     return (
                       <line
                         key={deg}
@@ -310,13 +301,14 @@ export default function App() {
                         x2={end.x}
                         y2={end.y}
                         stroke={ACCENT_GOLD}
-                        strokeWidth={0.4}
-                        opacity={0.4}
+                        strokeWidth={0.3}
+                        opacity={0.28}
                       />
                     );
                   })}
-                  <circle cx={CX} cy={CY} r="14" fill="url(#centerGlow)" />
-                  <circle cx={CX} cy={CY} r="5" fill={ACCENT_GOLD} stroke="rgba(232, 220, 192, 0.9)" strokeWidth="0.5" />
+                  <circle cx={CX} cy={CY} r="13" fill="url(#centerGlow)" />
+                  <circle cx={CX} cy={CY} r={CENTER_CORE_RING_R} fill="none" stroke="rgba(232, 220, 192, 0.4)" strokeWidth="0.4" />
+                  <circle cx={CX} cy={CY} r="4.5" fill={ACCENT_GOLD} stroke="rgba(232, 220, 192, 0.85)" strokeWidth="0.45" />
                 </g>
               </svg>
             </div>

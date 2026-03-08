@@ -36,6 +36,32 @@ body {
   display: grid;
   place-items: center;
   padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right)) max(1.5rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
+  position: relative;
+}
+
+.app-header {
+  position: absolute;
+  top: max(0.75rem, env(safe-area-inset-top));
+  left: max(1rem, env(safe-area-inset-left));
+  z-index: 5;
+}
+
+.app-logo {
+  display: block;
+  height: 36px;
+  width: auto;
+  object-fit: contain;
+}
+
+.compass-promo {
+  margin: 0;
+  text-align: center;
+  font-size: clamp(0.95rem, 3.5vw, 1.15rem);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: rgba(232, 220, 192, 0.95);
+  line-height: 1.4;
+  padding: 0 0.5rem;
 }
 
 .roulette-card {
@@ -93,8 +119,8 @@ body {
   position: absolute;
   top: -8px;
   left: 50%;
-  width: 22px;
-  height: 38px;
+  width: 26px;
+  height: 44px;
   transform: translateX(-50%);
   z-index: 10;
 }
@@ -104,14 +130,15 @@ body {
   position: absolute;
   left: 50%;
   top: 0;
-  width: 16px;
-  height: 16px;
+  width: 19px;
+  height: 19px;
   transform: translateX(-50%);
   border-radius: 50%;
   background: radial-gradient(circle at 35% 30%, #E8DCC0 0%, #C9A96E 70%, #0B132B 100%);
   box-shadow:
-    0 0 12px rgba(201, 169, 110, 0.4),
-    0 2px 8px rgba(11, 19, 43, 0.6),
+    0 0 18px rgba(201, 169, 110, 0.45),
+    0 0 8px rgba(201, 169, 110, 0.25),
+    0 3px 10px rgba(11, 19, 43, 0.5),
     0 0 0 0.5px rgba(232, 220, 192, 0.5);
 }
 
@@ -119,14 +146,16 @@ body {
   content: "";
   position: absolute;
   left: 50%;
-  top: 10px;
+  top: 11px;
   transform: translateX(-50%);
   width: 0;
   height: 0;
-  border-left: 8px solid transparent;
-  border-right: 8px solid transparent;
-  border-top: 20px solid #E8DCC0;
-  filter: drop-shadow(0 1px 3px rgba(11, 19, 43, 0.5));
+  border-left: 9px solid transparent;
+  border-right: 9px solid transparent;
+  border-top: 24px solid #E8DCC0;
+  filter:
+    drop-shadow(0 0 6px rgba(201, 169, 110, 0.35))
+    drop-shadow(0 2px 4px rgba(11, 19, 43, 0.45));
 }
 
 .spin-button {
