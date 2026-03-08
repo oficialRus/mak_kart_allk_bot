@@ -6,25 +6,21 @@ const SECTOR_ANGLE = 360 / SECTOR_COUNT; // 40°
 const SPIN_DURATION_MS = 4200;
 const NUMBERS = Array.from({ length: SECTOR_COUNT }, (_, index) => index + 1);
 
-// Геометрия колеса (полярная система, центр — математически точный)
+// Геометрия компаса (полярная система)
 const CX = 50;
 const CY = 50;
 const RIM_OUTER_R = 48;
 const WHEEL_OUTER_R = RIM_OUTER_R;
 const RIM_INNER_R = 42;
-const SEGMENT_BORDER_STROKE = 0.6;
+const INNER_RING_R = 20; // тонкое кольцо вокруг центра
+const SEGMENT_BORDER_STROKE = 0.35;
 const toRad = (deg: number) => (deg * Math.PI) / 180;
 
-// Полярные → декартовы (0° = право, угол против часовой)
 function polar(cx: number, cy: number, r: number, deg: number) {
   const rad = toRad(deg);
   return { x: cx + r * Math.cos(rad), y: cy - r * Math.sin(rad) };
 }
 
-/**
- * Истинный круговой сектор: два радиальных отрезка от центра + одна внешняя дуга (SVG A).
- * Угол сектора 40°, один центр (cx,cy), один внешний радиус для всех. Без Bezier.
- */
 function segmentPath(i: number): string {
   const startDeg = -90 + i * SECTOR_ANGLE;
   const endDeg = -90 + (i + 1) * SECTOR_ANGLE;
@@ -38,27 +34,30 @@ function numberPosition(i: number, r: number) {
   return polar(CX, CY, r, deg);
 }
 
-// Кольцо обводкой: один круг, stroke = толщина кольца, центр = центр колеса
 const RIM_MID_R = (RIM_INNER_R + RIM_OUTER_R) / 2;
 const RIM_STROKE_WIDTH = RIM_OUTER_R - RIM_INNER_R;
 
-const SEGMENT_COLORS = [
-  "#111827",
-  "#0f172a",
-  "#1e293b",
-  "#020617",
-  "#111827",
-  "#0b1220",
-  "#020617",
-  "#111827",
-  "#1e293b",
+// Палитра: тёмно-синие градиенты, низкий контраст (компас, не рулетка)
+const SEGMENT_GRADIENTS = [
+  { from: "#0f1629", to: "#151f35" },
+  { from: "#0d1526", to: "#131c32" },
+  { from: "#111a2e", to: "#172138" },
+  { from: "#0b132b", to: "#121b30" },
+  { from: "#0e1728", to: "#141d33" },
+  { from: "#0c1427", to: "#131b31" },
+  { from: "#0b132b", to: "#111a2e" },
+  { from: "#0f1629", to: "#151f35" },
+  { from: "#10182c", to: "#161e36" },
 ];
 
-const NUMBER_COLOR = "#F5E6C8"; // тёплый беж
+const NUMBER_COLOR = "#E8DCC0"; // тёплый беж
 const ACCENT_GOLD = "#C9A96E";
 
-const TICK_INNER_R = 46;
-const TICK_OUTER_R = 48;
+// Тики компаса: основные на границах секторов, второстепенные — посередине
+const TICK_MAIN_INNER_R = 44;
+const TICK_MAIN_OUTER_R = 48;
+const TICK_SECOND_INNER_R = 45;
+const TICK_SECOND_OUTER_R = 47;
 
 export default function App() {
   const [rotation, setRotation] = useState(0);
@@ -158,30 +157,75 @@ export default function App() {
               }
               aria-label="Рулетка с девятью сегментами"
             >
-              <svg className="wheel-svg" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">
+              <svg className="wheel-svg" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" aria-label="Компас цифровой психологии — девять направлений">
                 <defs>
+                  {/* Градиенты секторов (тёмно-синие, плавные) */}
+                  {SEGMENT_GRADIENTS.map((g, i) => {
+                    const end = polar(50, 50, 50, -90 + (i + 0.5) * SECTOR_ANGLE);
+                    return (
+                      <linearGradient
+                        key={i}
+                        id={`segmentGrad-${i}`}
+                        x1="50"
+                        y1="50"
+                        x2={String(end.x)}
+                        y2={String(end.y)}
+                        gradientUnits="userSpaceOnUse"
+                      >
+                        <stop offset="0%" stopColor={g.from} />
+                        <stop offset="100%" stopColor={g.to} />
+                      </linearGradient>
+                    );
+                  })}
+                  {/* Свечение центра — точка интуиции */}
                   <radialGradient id="centerGlow" cx="50%" cy="50%" r="50%">
-                    <stop offset="0%" stopColor="#F5E6C8" stopOpacity="0.9" />
-                    <stop offset="45%" stopColor="#C9A96E" stopOpacity="0.6" />
-                    <stop offset="100%" stopColor="#020617" stopOpacity="0" />
+                    <stop offset="0%" stopColor="#E8DCC0" stopOpacity="0.95" />
+                    <stop offset="30%" stopColor={ACCENT_GOLD} stopOpacity="0.5" />
+                    <stop offset="70%" stopColor={ACCENT_GOLD} stopOpacity="0.15" />
+                    <stop offset="100%" stopColor="#0B132B" stopOpacity="0" />
                   </radialGradient>
+                  <filter id="centerGlowFilter" x="-50%" y="-50%" width="200%" height="200%">
+                    <feGaussianBlur in="SourceGraphic" stdDeviation="1.5" result="blur" />
+                    <feMerge>
+                      <feMergeNode in="blur" />
+                      <feMergeNode in="SourceGraphic" />
+                    </feMerge>
+                  </filter>
                 </defs>
 
+                {/* Секторы компаса (направления 1–9) */}
                 {NUMBERS.map((n, i) => (
                   <path
                     key={i}
                     d={segmentPath(i)}
-                    fill={SEGMENT_COLORS[i]}
-                    stroke="rgba(148, 163, 184, 0.15)"
+                    fill={`url(#segmentGrad-${i})`}
+                    stroke="rgba(201, 169, 110, 0.12)"
                     strokeWidth={SEGMENT_BORDER_STROKE}
                   />
                 ))}
 
-                {/* Тонкие разделители‑тики по окружности */}
+                {/* Радиальные линии навигации от центра */}
                 {NUMBERS.map((_, i) => {
                   const angle = -90 + i * SECTOR_ANGLE;
-                  const inner = polar(CX, CY, TICK_INNER_R, angle);
-                  const outer = polar(CX, CY, TICK_OUTER_R, angle);
+                  const outer = polar(CX, CY, WHEEL_OUTER_R, angle);
+                  return (
+                    <line
+                      key={`radial-${i}`}
+                      x1={CX}
+                      y1={CY}
+                      x2={outer.x}
+                      y2={outer.y}
+                      stroke="rgba(201, 169, 110, 0.18)"
+                      strokeWidth={0.25}
+                    />
+                  );
+                })}
+
+                {/* Основные тики компаса на границах секторов */}
+                {NUMBERS.map((_, i) => {
+                  const angle = -90 + i * SECTOR_ANGLE;
+                  const inner = polar(CX, CY, TICK_MAIN_INNER_R, angle);
+                  const outer = polar(CX, CY, TICK_MAIN_OUTER_R, angle);
                   return (
                     <line
                       key={`tick-${i}`}
@@ -189,13 +233,30 @@ export default function App() {
                       y1={inner.y}
                       x2={outer.x}
                       y2={outer.y}
-                      stroke="rgba(148, 163, 184, 0.4)"
-                      strokeWidth={0.4}
+                      stroke="rgba(201, 169, 110, 0.35)"
+                      strokeWidth={0.5}
+                    />
+                  );
+                })}
+                {/* Второстепенные тонкие разделители (между секторами) */}
+                {NUMBERS.map((_, i) => {
+                  const angle = -90 + (i + 0.5) * SECTOR_ANGLE;
+                  const inner = polar(CX, CY, TICK_SECOND_INNER_R, angle);
+                  const outer = polar(CX, CY, TICK_SECOND_OUTER_R, angle);
+                  return (
+                    <line
+                      key={`tick-sec-${i}`}
+                      x1={inner.x}
+                      y1={inner.y}
+                      x2={outer.x}
+                      y2={outer.y}
+                      stroke="rgba(201, 169, 110, 0.15)"
+                      strokeWidth={0.3}
                     />
                   );
                 })}
 
-                {/* Числа по окружности */}
+                {/* Числа — тёплый беж */}
                 {NUMBERS.map((n, i) => {
                   const pos = numberPosition(i, 33);
                   return (
@@ -215,7 +276,7 @@ export default function App() {
                   );
                 })}
 
-                {/* Внешнее тонкое кольцо‑рамка */}
+                {/* Внешнее тонкое кольцо */}
                 <circle
                   cx={CX}
                   cy={CY}
@@ -224,12 +285,39 @@ export default function App() {
                   stroke={ACCENT_GOLD}
                   strokeWidth={RIM_STROKE_WIDTH}
                   strokeLinejoin="round"
-                  opacity={0.6}
+                  opacity={0.4}
                 />
 
-                {/* Мягкое свечение в центре — «интуиция» */}
-                <circle cx={CX} cy={CY} r="18" fill="url(#centerGlow)" opacity={0.85} />
-                <circle cx={CX} cy={CY} r="6" fill={ACCENT_GOLD} stroke="#fefce8" strokeWidth="0.6" />
+                {/* Тонкое внутреннее кольцо вокруг центра */}
+                <circle
+                  cx={CX}
+                  cy={CY}
+                  r={INNER_RING_R}
+                  fill="none"
+                  stroke="rgba(201, 169, 110, 0.35)"
+                  strokeWidth={0.5}
+                />
+
+                {/* Центр: светящаяся точка интуиции + радиальные лучи */}
+                <g filter="url(#centerGlowFilter)">
+                  {[0, 45, 90, 135, 180, 225, 270, 315].map((deg) => {
+                    const end = polar(CX, CY, 16, deg);
+                    return (
+                      <line
+                        key={deg}
+                        x1={CX}
+                        y1={CY}
+                        x2={end.x}
+                        y2={end.y}
+                        stroke={ACCENT_GOLD}
+                        strokeWidth={0.4}
+                        opacity={0.4}
+                      />
+                    );
+                  })}
+                  <circle cx={CX} cy={CY} r="14" fill="url(#centerGlow)" />
+                  <circle cx={CX} cy={CY} r="5" fill={ACCENT_GOLD} stroke="rgba(232, 220, 192, 0.9)" strokeWidth="0.5" />
+                </g>
               </svg>
             </div>
           </div>

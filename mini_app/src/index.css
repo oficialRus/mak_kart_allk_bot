@@ -1,8 +1,8 @@
 :root {
   font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
-  color: #f5e6c8;
-  background-color: #0f172a;
-  background-image: radial-gradient(circle at 50% 0%, #1e293b 0%, #020617 55%, #020617 100%);
+  color: #E8DCC0;
+  background-color: #0B132B;
+  background-image: radial-gradient(ellipse 120% 80% at 50% 0%, rgba(27, 39, 59, 0.6) 0%, #0B132B 50%, #0B132B 100%);
 }
 
 * {
@@ -45,11 +45,11 @@ body {
   gap: 1.2rem;
   padding: 1.5rem 1.25rem 1.8rem;
   border-radius: 28px;
-  background: radial-gradient(circle at 10% 0%, rgba(148, 163, 184, 0.16) 0%, rgba(15, 23, 42, 0.98) 45%, rgba(15, 23, 42, 0.98) 100%);
+  background: radial-gradient(circle at 50% 0%, rgba(22, 32, 52, 0.7) 0%, rgba(11, 19, 43, 0.95) 50%, #0B132B 100%);
   box-shadow:
-    0 18px 40px rgba(15, 23, 42, 0.9),
-    0 0 0 0.5px rgba(148, 163, 184, 0.4);
-  backdrop-filter: blur(22px);
+    0 20px 50px rgba(0, 0, 0, 0.4),
+    0 0 0 0.5px rgba(201, 169, 110, 0.15);
+  backdrop-filter: blur(20px);
 }
 
 .wheel-area {
@@ -65,11 +65,11 @@ body {
   width: var(--size);
   height: var(--size);
   border-radius: 999px;
-  background: radial-gradient(circle at 50% 15%, #1e293b 0%, #0b1120 55%, #020617 100%);
+  background: radial-gradient(circle at 50% 50%, #151f35 0%, #0f1629 40%, #0B132B 100%);
   box-shadow:
-    0 18px 45px rgba(15, 23, 42, 0.9),
-    0 0 0 0.75px rgba(148, 163, 184, 0.4),
-    inset 0 1px 0 rgba(248, 250, 252, 0.06);
+    0 20px 48px rgba(0, 0, 0, 0.45),
+    0 0 0 0.5px rgba(201, 169, 110, 0.2),
+    inset 0 1px 0 rgba(201, 169, 110, 0.04);
   display: grid;
   place-items: center;
 }
@@ -104,28 +104,29 @@ body {
   position: absolute;
   left: 50%;
   top: 0;
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   transform: translateX(-50%);
   border-radius: 50%;
-  background: radial-gradient(circle at 35% 30%, #fefce8 0%, #f5e6c8 45%, #c9a96e 100%);
+  background: radial-gradient(circle at 35% 30%, #E8DCC0 0%, #C9A96E 70%, #0B132B 100%);
   box-shadow:
-    0 4px 10px rgba(15, 23, 42, 0.8),
-    0 0 0 0.5px rgba(248, 250, 252, 0.75);
+    0 0 12px rgba(201, 169, 110, 0.4),
+    0 2px 8px rgba(11, 19, 43, 0.6),
+    0 0 0 0.5px rgba(232, 220, 192, 0.5);
 }
 
 .pointer::after {
   content: "";
   position: absolute;
   left: 50%;
-  top: 12px;
+  top: 10px;
   transform: translateX(-50%);
   width: 0;
   height: 0;
-  border-left: 9px solid transparent;
-  border-right: 9px solid transparent;
-  border-top: 22px solid #e5ddc1;
-  filter: drop-shadow(0 2px 4px rgba(15, 23, 42, 0.8));
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-top: 20px solid #E8DCC0;
+  filter: drop-shadow(0 1px 3px rgba(11, 19, 43, 0.5));
 }
 
 .spin-button {
@@ -134,19 +135,22 @@ body {
   padding: 0.75rem 2.2rem;
   font-size: 1rem;
   font-weight: 600;
-  letter-spacing: 0.03em;
-  color: #020617;
-  background: linear-gradient(120deg, #f5e6c8 0%, #e4d3b0 35%, #c9a96e 100%);
+  letter-spacing: 0.04em;
+  color: #0B132B;
+  background: linear-gradient(160deg, #E8DCC0 0%, #d4c4a8 40%, #C9A96E 100%);
   box-shadow:
-    0 10px 24px rgba(15, 23, 42, 0.9),
-    inset 0 1px 2px rgba(255, 255, 255, 0.9);
+    0 8px 24px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.25);
   cursor: pointer;
-  transition: transform 150ms ease, filter 150ms ease, opacity 150ms ease;
+  transition: transform 180ms ease, box-shadow 180ms ease, opacity 150ms ease;
 }
 
 .spin-button:hover:not(:disabled) {
   transform: translateY(-1px);
-  filter: brightness(1.07);
+  box-shadow:
+    0 10px 28px rgba(0, 0, 0, 0.4),
+    0 0 0 0.5px rgba(201, 169, 110, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
 }
 
 .spin-button:disabled {
@@ -173,7 +177,7 @@ body {
 
 .result-description {
   margin: 0.45rem 0 0;
-  color: rgba(226, 232, 240, 0.88);
+  color: rgba(232, 220, 192, 0.85);
   font-size: clamp(0.92rem, 3.6vw, 1.02rem);
 }
 
@@ -181,13 +185,15 @@ body {
   0%,
   100% {
     box-shadow:
-      0 5px 16px rgba(116, 194, 255, 0.45),
-      inset 0 1px 2px rgba(255, 255, 255, 0.85);
+      0 8px 24px rgba(0, 0, 0, 0.35),
+      0 0 0 0 rgba(201, 169, 110, 0.2),
+      inset 0 1px 0 rgba(255, 255, 255, 0.25);
   }
   50% {
     box-shadow:
-      0 8px 20px rgba(152, 254, 213, 0.75),
-      inset 0 1px 3px rgba(255, 255, 255, 0.9);
+      0 10px 28px rgba(0, 0, 0, 0.4),
+      0 0 20px rgba(201, 169, 110, 0.25),
+      inset 0 1px 0 rgba(255, 255, 255, 0.3);
   }
 }
 
