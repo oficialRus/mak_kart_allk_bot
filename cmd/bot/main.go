@@ -21,6 +21,7 @@ import (
 	"mak_kart_allk_bot/handlers/question"
 	"mak_kart_allk_bot/handlers/shop"
 	"mak_kart_allk_bot/handlers/technique"
+	"mak_kart_allk_bot/internal/db"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/joho/godotenv"
@@ -34,6 +35,12 @@ func main() {
 			break
 		}
 	}
+
+	// Инициализируем подключение к PostgreSQL.
+	if err := db.InitFromEnv(); err != nil {
+		log.Fatalf("db init: %v", err)
+	}
+	log.Println("DB connected OK")
 
 	token := strings.TrimSpace(os.Getenv("BOT_TOKEN"))
 	if token == "" {
@@ -92,8 +99,21 @@ func main() {
 		isStart := (update.Message.IsCommand() && update.Message.Command() == "start") ||
 			update.Message.Text == "/start" || (len(update.Message.Text) >= 6 && update.Message.Text[:6] == "/start")
 		if isStart {
-			log.Printf("Received /start from chat %d", update.Message.Chat.ID)
-			handleStart(bot, update.Message.Chat.ID)
+			// Разбираем payload после /start, например /start birth_spread
+			text := strings.TrimSpace(update.Message.Text)
+			payload := ""
+			if len(text) > len("/start") {
+				payload = strings.TrimSpace(text[len("/start"):])
+			}
+
+			if payload == "birth_spread" {
+				log.Printf("Received /start birth_spread from chat %d", update.Message.Chat.ID)
+				// Запускаем сценарий с официальной кнопкой «поделиться номером телефона».
+				cabinet.StartRegistration(bot, update.Message.Chat.ID)
+			} else {
+				log.Printf("Received /start from chat %d payload=%q", update.Message.Chat.ID, payload)
+				handleStart(bot, update.Message.Chat.ID)
+			}
 			continue
 		}
 
@@ -215,6 +235,9 @@ func handleCallback(bot *tgbotapi.BotAPI, q *tgbotapi.CallbackQuery, miniappURL,
 		card_day.Handle(bot, chatID)
 	case "ai_coach_number_day":
 		number_day.Handle(bot, chatID)
+	case "ai_coach_birth_spread":
+		// Запуск сценария расклада по дате рождения: официальный запрос номера телефона.
+		cabinet.StartRegistration(bot, chatID)
 	case "ai_coach_main_menu":
 		mainmenu.Handle(bot, chatID, miniappURL, token)
 	case "ai_coach_back":
@@ -456,6 +479,7 @@ func sendAiCoachWelcome(_ *tgbotapi.BotAPI, chatID int64, token, miniappURL stri
 			{{"text": "❓ Вопрос", "callback_data": "ai_coach_question"}, {"text": "🧩 Техника", "callback_data": "ai_coach_technique"}},
 			{{"text": "🃏 Расшифровка карты", "callback_data": "ai_coach_card_decode"}},
 			{{"text": "🗓️ Карта дня", "callback_data": "ai_coach_card_day"}, {"text": "🔢 Цифра дня", "web_app": map[string]string{"url": buttonURL}}},
+			{{"text": "✨ Получить расклад по дате рождения", "callback_data": "ai_coach_birth_spread"}},
 			{{"text": "🏠 Главное меню", "callback_data": "ai_coach_main_menu"}},
 		},
 	}

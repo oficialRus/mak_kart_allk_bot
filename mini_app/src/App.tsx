@@ -18,6 +18,14 @@ const NUMBER_RADIUS = 26; // числа чуть ближе к центру
 const SEGMENT_BORDER_STROKE = 0.35;
 const toRad = (deg: number) => (deg * Math.PI) / 180;
 
+type Profile = {
+  fullName: string;
+  birthDate: string;
+  phone: string;
+};
+
+const STORAGE_KEY_PROFILE = "garmonia_compass_profile_v1";
+
 function polar(cx: number, cy: number, r: number, deg: number) {
   const rad = toRad(deg);
   return { x: cx + r * Math.cos(rad), y: cy - r * Math.sin(rad) };
@@ -34,6 +42,20 @@ function segmentPath(i: number): string {
 function numberPosition(i: number, r: number) {
   const deg = -90 + (i + 0.5) * SECTOR_ANGLE;
   return polar(CX, CY, r, deg);
+}
+
+function hashStringToIndex(input: string, modulo: number): number {
+  let hash = 0;
+  for (let i = 0; i < input.length; i += 1) {
+    hash = (hash * 31 + input.charCodeAt(i)) | 0;
+  }
+  const positive = Math.abs(hash);
+  return positive % modulo;
+}
+
+function getTodayKey() {
+  const now = new Date();
+  return now.toISOString().slice(0, 10); // YYYY-MM-DD
 }
 
 // Внешнее тонкое золотое кольцо
@@ -64,6 +86,17 @@ export default function App() {
   const [rotation, setRotation] = useState(0);
   const [winningIndex, setWinningIndex] = useState<number | null>(null);
   const [isSpinning, setIsSpinning] = useState(false);
+  const [hasResult, setHasResult] = useState(false);
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [profileForm, setProfileForm] = useState<Profile>({
+    fullName: "",
+    birthDate: "",
+    phone: "",
+  });
+  const [profileErrors, setProfileErrors] = useState<Partial<Record<keyof Profile, string>>>({});
+  const [isProfileSubmitting, setIsProfileSubmitting] = useState(false);
+  const [dailyIndex, setDailyIndex] = useState<number | null>(null);
+  const [showBirthSpreadModal, setShowBirthSpreadModal] = useState(false);
 
   useEffect(() => {
     const w = window as unknown as {
@@ -115,22 +148,101 @@ export default function App() {
     return () => clearTimeout(t);
   }, []);
 
+  // Загружаем профиль из localStorage, если пользователь уже вводил данные.
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(STORAGE_KEY_PROFILE);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as Profile;
+      if (!parsed.fullName || !parsed.birthDate || !parsed.phone) return;
+      setProfile(parsed);
+      setProfileForm(parsed);
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  // При наличии профиля вычисляем "цифру дня" детерминированно на основе профиля и текущей даты.
+  useEffect(() => {
+    if (!profile) return;
+    const todayKey = getTodayKey();
+    const key = `${profile.fullName}|${profile.birthDate}|${profile.phone}|${todayKey}`;
+    const idx = hashStringToIndex(key, SECTOR_COUNT);
+    setDailyIndex(idx);
+    // Сбрасываем отображение результата до первого осознанного нажатия "Крутить".
+    setWinningIndex(null);
+    setHasResult(false);
+  }, [profile]);
+
+  const handleProfileChange = (field: keyof Profile, value: string) => {
+    setProfileForm((prev) => ({ ...prev, [field]: value }));
+    setProfileErrors((prev) => ({ ...prev, [field]: undefined }));
+  };
+
+  const handleProfileSubmit = (e: any) => {
+    e.preventDefault();
+    if (isProfileSubmitting) return;
+
+    const errors: Partial<Record<keyof Profile, string>> = {};
+    if (!profileForm.fullName.trim()) errors.fullName = "Введите ФИО";
+    if (!profileForm.birthDate.trim()) errors.birthDate = "Введите дату рождения";
+    if (!profileForm.phone.trim()) errors.phone = "Введите номер телефона";
+
+    if (Object.keys(errors).length > 0) {
+      setProfileErrors(errors);
+      return;
+    }
+
+    setIsProfileSubmitting(true);
+    const cleanProfile: Profile = {
+      fullName: profileForm.fullName.trim(),
+      birthDate: profileForm.birthDate.trim(),
+      phone: profileForm.phone.trim(),
+    };
+    try {
+      window.localStorage.setItem(STORAGE_KEY_PROFILE, JSON.stringify(cleanProfile));
+    } catch {
+      // ignore
+    }
+    setProfile(cleanProfile);
+    setIsProfileSubmitting(false);
+    // TODO: когда появится backend API, отправлять cleanProfile в handlers/cabinet.
+  };
+
+  const handleResetProfile = () => {
+    try {
+      window.localStorage.removeItem(STORAGE_KEY_PROFILE);
+    } catch {
+      // ignore
+    }
+    setProfile(null);
+    setProfileForm({
+      fullName: "",
+      birthDate: "",
+      phone: "",
+    });
+    setProfileErrors({});
+    setDailyIndex(null);
+    setWinningIndex(null);
+    setHasResult(false);
+    setRotation(0);
+  };
+
   const resultNumber = winningIndex === null ? "-" : NUMBERS[winningIndex];
   const handleSpin = () => {
     if (isSpinning) {
       return;
     }
 
+    if (profile == null || dailyIndex === null) {
+      return;
+    }
+
     setIsSpinning(true);
     setWinningIndex(null);
 
-    // Какой сектор (0..8) и его цифра (1..9) должны оказаться под указателем (верх)
-    const nextWinningIndex = Math.floor(Math.random() * SECTOR_COUNT);
-    // В polar верх = 90°. Центр сектора k: -70 + k*40.
-    // Для CSS-вращения (по часовой стрелке) хотим, чтобы
-    //   segmentCenterDeg - finalRotation ≡ pointerAngle (mod 360)
-    // У нас finalRotation = rotation + extraSpins*360 + targetOffset,
-    // поэтому учитываем текущий угол rotation по модулю 360:
+    // "Цифра дня" фиксирована для профиля и даты: крутим так, чтобы выбранный сектор dailyIndex оказался под указателем.
+    const nextWinningIndex = dailyIndex;
     const segmentCenterDeg = -90 + (nextWinningIndex + 0.5) * SECTOR_ANGLE;
     const pointerAngle = 90;
     const normalizedRotation = ((rotation % 360) + 360) % 360;
@@ -144,8 +256,64 @@ export default function App() {
     window.setTimeout(() => {
       setWinningIndex(nextWinningIndex);
       setIsSpinning(false);
+      setHasResult(true);
     }, SPIN_DURATION_MS);
   };
+
+  if (!profile) {
+    return (
+      <main className="page">
+        <header className="app-header">
+          <img src="/logo.png" alt="Гармония-Мак — Самопознание" className="app-logo" />
+        </header>
+        <section className="roulette-card onboarding-card">
+          <h1 className="onboarding-title">Познакомимся ближе</h1>
+          <p className="onboarding-subtitle">Заполните данные, чтобы рассчитать вашу личную цифру дня.</p>
+          <form className="onboarding-form" onSubmit={handleProfileSubmit}>
+            <label className="onboarding-field">
+              <span className="onboarding-label">ФИО</span>
+              <input
+                type="text"
+                className={`onboarding-input ${profileErrors.fullName ? "has-error" : ""}`}
+                placeholder="Фамилия Имя Отчество"
+                value={profileForm.fullName}
+                onChange={(e) => handleProfileChange("fullName", e.target.value)}
+              />
+              {profileErrors.fullName && <span className="onboarding-error">{profileErrors.fullName}</span>}
+            </label>
+
+            <label className="onboarding-field">
+              <span className="onboarding-label">Дата рождения</span>
+              <input
+                type="text"
+                className={`onboarding-input ${profileErrors.birthDate ? "has-error" : ""}`}
+                placeholder="Например, 15.05.1990"
+                value={profileForm.birthDate}
+                onChange={(e) => handleProfileChange("birthDate", e.target.value)}
+              />
+              {profileErrors.birthDate && <span className="onboarding-error">{profileErrors.birthDate}</span>}
+            </label>
+
+            <label className="onboarding-field">
+              <span className="onboarding-label">Телефон</span>
+              <input
+                type="tel"
+                className={`onboarding-input ${profileErrors.phone ? "has-error" : ""}`}
+                placeholder="+7 ..."
+                value={profileForm.phone}
+                onChange={(e) => handleProfileChange("phone", e.target.value)}
+              />
+              {profileErrors.phone && <span className="onboarding-error">{profileErrors.phone}</span>}
+            </label>
+
+            <button type="submit" className="spin-button" disabled={isProfileSubmitting}>
+              {isProfileSubmitting ? "Сохраняем..." : "Подтвердить и перейти к компасу"}
+            </button>
+          </form>
+        </section>
+      </main>
+    );
+  }
 
   return (
     <main className="page">
@@ -324,13 +492,61 @@ export default function App() {
           {isSpinning ? "Крутим..." : "Крутить"}
         </button>
 
-        <div className="result-text">
-          <p className="result-title">Ваша цифра дня: {resultNumber}</p>
-          <p className="result-description">
-            Описание: сегодня число {resultNumber} подсказывает держать курс на приоритеты и не распыляться.
-          </p>
-        </div>
+        {hasResult && (
+          <div className="result-text">
+            <p className="result-title">Ваша цифра дня: {resultNumber}</p>
+            <p className="result-description">
+              Описание: сегодня число {resultNumber} подсказывает держать курс на приоритеты и не распыляться.
+            </p>
+            <button type="button" className="secondary-button" onClick={() => setShowBirthSpreadModal(true)}>
+              Сделать расклад по дате рождения
+            </button>
+          </div>
+        )}
+        <button type="button" className="reset-link" onClick={handleResetProfile}>
+          /delete — очистить локальные данные
+        </button>
       </section>
+
+      {showBirthSpreadModal && (
+        <div className="modal-overlay" onClick={() => setShowBirthSpreadModal(false)} aria-hidden="false">
+          <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              className="modal-close"
+              onClick={() => setShowBirthSpreadModal(false)}
+              aria-label="Закрыть"
+            >
+              ×
+            </button>
+            <p className="modal-text">
+              Перейдите в личный кабинет бота, чтобы получить свой расклад по дате рождения.
+            </p>
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="modal-close-app-btn"
+                onClick={() => {
+                  const w = window as unknown as {
+                    Telegram?: {
+                      WebApp?: {
+                        close?: () => void;
+                      };
+                    };
+                  };
+                  try {
+                    w.Telegram?.WebApp?.close?.();
+                  } catch {
+                    // ignore
+                  }
+                }}
+              >
+                Закрыть приложение
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

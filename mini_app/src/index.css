@@ -78,6 +78,78 @@ body {
   backdrop-filter: blur(20px);
 }
 
+.onboarding-card {
+  align-content: flex-start;
+  row-gap: 1.4rem;
+}
+
+.onboarding-title {
+  margin: 0;
+  text-align: center;
+  font-size: clamp(1.2rem, 4vw, 1.5rem);
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+
+.onboarding-subtitle {
+  margin: 0;
+  text-align: center;
+  font-size: clamp(0.9rem, 3.4vw, 1rem);
+  color: rgba(232, 220, 192, 0.8);
+  max-width: 420px;
+}
+
+.onboarding-form {
+  width: 100%;
+  display: grid;
+  gap: 0.85rem;
+}
+
+.onboarding-field {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.onboarding-label {
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(232, 220, 192, 0.75);
+}
+
+.onboarding-input {
+  width: 100%;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(15, 23, 42, 0.75);
+  color: #e8dcc0;
+  padding: 0.55rem 1rem;
+  font-size: 0.9rem;
+  outline: none;
+  transition: border-color 140ms ease, box-shadow 140ms ease, background-color 140ms ease;
+}
+
+.onboarding-input::placeholder {
+  color: rgba(148, 163, 184, 0.75);
+}
+
+.onboarding-input:focus {
+  border-color: rgba(201, 169, 110, 0.9);
+  box-shadow:
+    0 0 0 1px rgba(201, 169, 110, 0.4),
+    0 0 12px rgba(201, 169, 110, 0.3);
+  background: rgba(15, 23, 42, 0.9);
+}
+
+.onboarding-input.has-error {
+  border-color: rgba(248, 113, 113, 0.9);
+}
+
+.onboarding-error {
+  font-size: 0.78rem;
+  color: rgba(248, 113, 113, 0.95);
+}
+
 .wheel-area {
   width: 100%;
   display: grid;
@@ -208,6 +280,122 @@ body {
   margin: 0.45rem 0 0;
   color: rgba(232, 220, 192, 0.85);
   font-size: clamp(0.92rem, 3.6vw, 1.02rem);
+}
+
+.secondary-button {
+  margin-top: 0.85rem;
+  border-radius: 999px;
+  padding: 0.55rem 1.6rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  letter-spacing: 0.03em;
+  border: 1px solid rgba(201, 169, 110, 0.6);
+  background: rgba(15, 23, 42, 0.85);
+  color: #e8dcc0;
+  cursor: pointer;
+  transition: background-color 160ms ease, border-color 160ms ease, transform 120ms ease;
+}
+
+.secondary-button:hover {
+  background: rgba(15, 23, 42, 0.95);
+  border-color: rgba(201, 169, 110, 0.9);
+  transform: translateY(-1px);
+}
+
+.reset-link {
+  margin-top: 0.6rem;
+  font-size: 0.78rem;
+  color: rgba(148, 163, 184, 0.8);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.reset-link:hover {
+  color: rgba(226, 232, 240, 0.95);
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(11, 19, 43, 0.85);
+  backdrop-filter: blur(8px);
+}
+
+.modal-box {
+  position: relative;
+  width: min(92vw, 360px);
+  padding: 1.5rem 1.25rem 1.25rem;
+  border-radius: 20px;
+  background: radial-gradient(circle at 50% 0%, rgba(22, 32, 52, 0.95) 0%, rgba(11, 19, 43, 0.98) 100%);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5), 0 0 0 0.5px rgba(201, 169, 110, 0.2);
+}
+
+.modal-close {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(201, 169, 110, 0.15);
+  color: #E8DCC0;
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 150ms ease, color 150ms ease;
+}
+
+.modal-close:hover {
+  background: rgba(201, 169, 110, 0.3);
+}
+
+.modal-text {
+  margin: 0;
+  padding-right: 1.5rem;
+  font-size: clamp(0.95rem, 3.5vw, 1.05rem);
+  line-height: 1.45;
+  color: rgba(232, 220, 192, 0.95);
+}
+
+.modal-actions {
+  margin-top: 1.1rem;
+  display: flex;
+  justify-content: center;
+}
+
+.modal-close-app-btn {
+  border-radius: 999px;
+  padding: 0.6rem 1.9rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  letter-spacing: 0.03em;
+  border: 1px solid rgba(201, 169, 110, 0.8);
+  background: linear-gradient(150deg, #e8dcc0 0%, #c9a96e 100%);
+  color: #0B132B;
+  cursor: pointer;
+  box-shadow:
+    0 8px 20px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  transition: transform 150ms ease, box-shadow 150ms ease, opacity 150ms ease;
+}
+
+.modal-close-app-btn:hover {
+  transform: translateY(-1px);
+  box-shadow:
+    0 10px 26px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
 }
 
 @keyframes pulse {
