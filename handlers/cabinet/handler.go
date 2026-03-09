@@ -1,7 +1,14 @@
 package cabinet
 
 import (
+	"bytes"
+	"encoding/json"
+	"io"
 	"log"
+	"mime/multipart"
+	"net/http"
+	"os"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -31,10 +38,10 @@ func Handle(bot *tgbotapi.BotAPI, chatID int64) {
 	photo.Caption = cabinetCaption
 	photo.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("Пройти регистрацию", "cabinet_register"),
+			tgbotapi.NewInlineKeyboardButtonData("📝 Пройти регистрацию", "cabinet_register"),
 		),
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("Назад", "ai_coach_main_menu"),
+			tgbotapi.NewInlineKeyboardButtonData("⬅️ Назад", "ai_coach_main_menu"),
 		),
 	)
 	if _, err := bot.Send(photo); err != nil {
@@ -51,7 +58,7 @@ func StartRegistration(bot *tgbotapi.BotAPI, chatID int64) {
 	msg := tgbotapi.NewMessage(chatID, "Шаг 1 из 3. Отправьте номер телефона (нажмите кнопку ниже или напишите в чат):")
 	keyboard := tgbotapi.NewReplyKeyboard(
 		tgbotapi.NewKeyboardButtonRow(
-			tgbotapi.NewKeyboardButtonContact("Отправить номер телефона"),
+			tgbotapi.NewKeyboardButtonContact("📲 Отправить номер телефона"),
 		),
 	)
 	keyboard.OneTimeKeyboard = true
@@ -122,17 +129,102 @@ func HandleRegistrationMessage(bot *tgbotapi.BotAPI, chatID int64, message *tgbo
 
 // SendCabinetMenu отправляет сообщение с меню личного кабинета (6 кнопок).
 // Текст — приветствие или описание (например, после регистрации).
+// Кнопка «Цифра дня» здесь сразу открывает Mini App, как и в разделе «Подарок».
 func SendCabinetMenu(bot *tgbotapi.BotAPI, chatID int64, text string) {
-	msg := tgbotapi.NewMessage(chatID, text)
+	token := strings.TrimSpace(os.Getenv("BOT_TOKEN"))
+	miniappURL := strings.TrimSpace(os.Getenv("MINI_APP_URL"))
+	if miniappURL == "" {
+		miniappURL = "https://localhost:5173/"
+	}
+	buttonURL := miniappURL
+	if strings.Contains(buttonURL, "localhost") {
+		buttonURL = "https://example.com"
+	}
+
+	// Если по какой-то причине токен не найден (не должен случаться),
+	// используем запасной вариант через bot.Send без Mini App.
+	if token == "" {
+		msg := tgbotapi.NewMessage(chatID, text)
+		msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
+			tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData("✏️ Редактировать профиль", "cabinet_profile")),
+			tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData("📂 Мои разборы", "cabinet_my_reviews")),
+			tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData("🧮 Матрица по дате рождения", "cabinet_matrix")),
+			tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData("🔢 Цифра дня", "cabinet_number_day")),
+			tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData("📚 Обучение", "cabinet_education")),
+			tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData("🏠 Перейти на главную", "ai_coach_main_menu")),
+		)
+		if _, err := bot.Send(msg); err != nil {
+			log.Printf("ERROR sending cabinet menu (fallback): %v", err)
+		}
+		return
+	}
+
+	replyMarkup := map[string]interface{}{
+		"inline_keyboard": [][]map[string]interface{}{
+			{
+				{"text": "✏️ Редактировать профиль", "callback_data": "cabinet_profile"},
+			},
+			{
+				{"text": "📂 Мои разборы", "callback_data": "cabinet_my_reviews"},
+			},
+			{
+				{"text": "🧮 Матрица по дате рождения", "callback_data": "cabinet_matrix"},
+			},
+			{
+				// Здесь сразу Mini App «Цифра дня».
+				{"text": "🔢 Цифра дня", "web_app": map[string]string{"url": buttonURL}},
+			},
+			{
+				{"text": "📚 Обучение", "callback_data": "cabinet_education"},
+			},
+			{
+				{"text": "🏠 Перейти на главную", "callback_data": "ai_coach_main_menu"},
+			},
+		},
+	}
+	markupJSON, _ := json.Marshal(replyMarkup)
+
+	body := &bytes.Buffer{}
+	w := multipart.NewWriter(body)
+	_ = w.WriteField("chat_id", strconv.FormatInt(chatID, 10))
+	_ = w.WriteField("text", text)
+	_ = w.WriteField("reply_markup", string(markupJSON))
+	_ = w.Close()
+
+	req, err := http.NewRequest(http.MethodPost, "https://api.telegram.org/bot"+token+"/sendMessage", body)
+	if err != nil {
+		log.Printf("ERROR SendCabinetMenu request: %v", err)
+		return
+	}
+	req.Header.Set("Content-Type", "multipart/form-data; boundary="+w.Boundary())
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		log.Printf("ERROR SendCabinetMenu sendMessage: %v", err)
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(resp.Body)
+		log.Printf("ERROR SendCabinetMenu response: %d %s", resp.StatusCode, string(b))
+	}
+}
+
+// SendEditProfileMenu показывает кнопки, что именно редактировать в профиле.
+func SendEditProfileMenu(bot *tgbotapi.BotAPI, chatID int64) {
+	msg := tgbotapi.NewMessage(chatID, "Что вы хотите изменить в профиле?")
 	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
-		tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData("Профиль", "cabinet_profile")),
-		tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData("Мои разборы", "cabinet_my_reviews")),
-		tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData("Матрица по дате рождения", "cabinet_matrix")),
-		tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData("Цифра дня", "cabinet_number_day")),
-		tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData("Обучение", "cabinet_education")),
-		tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData("Перейти на главную", "ai_coach_main_menu")),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("📞 Телефон", "cabinet_edit_phone"),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("👤 ФИО", "cabinet_edit_fio"),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("🎂 Дата рождения", "cabinet_edit_birthdate"),
+		),
 	)
 	if _, err := bot.Send(msg); err != nil {
-		log.Printf("ERROR sending cabinet menu: %v", err)
+		log.Printf("ERROR sending edit profile menu: %v", err)
 	}
 }

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"log"
@@ -21,6 +22,8 @@ import (
 	"mak_kart_allk_bot/handlers/question"
 	"mak_kart_allk_bot/handlers/shop"
 	"mak_kart_allk_bot/handlers/technique"
+	"mak_kart_allk_bot/internal/api"
+	"mak_kart_allk_bot/internal/db"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/joho/godotenv"
@@ -34,6 +37,17 @@ func main() {
 			break
 		}
 	}
+
+	// Инициализируем подключение к PostgreSQL.
+	if err := db.InitFromEnv(); err != nil {
+		log.Fatalf("db init: %v", err)
+	}
+	log.Println("DB connected OK")
+
+	if err := db.EnsureProfileTable(context.Background()); err != nil {
+		log.Fatalf("db ensure profile table: %v", err)
+	}
+	log.Println("DB profile table OK")
 
 	token := strings.TrimSpace(os.Getenv("BOT_TOKEN"))
 	if token == "" {
@@ -61,6 +75,20 @@ func main() {
 	} else {
 		log.Println("Webhook removed OK")
 	}
+
+	// HTTP API для мини‑приложения (сохранение профиля: ФИО, дата рождения, Telegram ID).
+	apiPort := strings.TrimSpace(os.Getenv("API_PORT"))
+	if apiPort == "" {
+		apiPort = "8080"
+	}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/profile", api.ProfileHandler(token))
+	go func() {
+		log.Printf("API listening on :%s", apiPort)
+		if err := http.ListenAndServe(":"+apiPort, mux); err != nil {
+			log.Printf("API server error: %v", err)
+		}
+	}()
 
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = 60
@@ -92,8 +120,21 @@ func main() {
 		isStart := (update.Message.IsCommand() && update.Message.Command() == "start") ||
 			update.Message.Text == "/start" || (len(update.Message.Text) >= 6 && update.Message.Text[:6] == "/start")
 		if isStart {
-			log.Printf("Received /start from chat %d", update.Message.Chat.ID)
-			handleStart(bot, update.Message.Chat.ID)
+			// Разбираем payload после /start, например /start birth_spread
+			text := strings.TrimSpace(update.Message.Text)
+			payload := ""
+			if len(text) > len("/start") {
+				payload = strings.TrimSpace(text[len("/start"):])
+			}
+
+			if payload == "birth_spread" {
+				log.Printf("Received /start birth_spread from chat %d", update.Message.Chat.ID)
+				// Запускаем сценарий с официальной кнопкой «поделиться номером телефона».
+				cabinet.StartRegistration(bot, update.Message.Chat.ID)
+			} else {
+				log.Printf("Received /start from chat %d payload=%q", update.Message.Chat.ID, payload)
+				handleStart(bot, update.Message.Chat.ID)
+			}
 			continue
 		}
 
@@ -109,14 +150,14 @@ func main() {
 }
 
 func handleStart(bot *tgbotapi.BotAPI, chatID int64) {
-	msg := tgbotapi.NewMessage(chatID, "Здравствуйте! Мы рады вас видеть! Выберите одну из кнопок ниже.")
+	msg := tgbotapi.NewMessage(chatID, "Привет! Я ваш личный бот‑психолог и коуч.\n\nЯ помогаю:\n— работать с ассоциативными и метафорическими картами\n— разбираться в ваших состояниях через вопросы и подсказки\n— использовать подходы цифровой психологии для самопознания\n\nВыберите одну из кнопок ниже, чтобы продолжить.")
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("ИИ Психолог-Коуч", "ai_coach"),
+			tgbotapi.NewInlineKeyboardButtonData("🤖 ИИ Психолог-Коуч", "ai_coach"),
 		),
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("Обратная связь", "feedback"),
-			tgbotapi.NewInlineKeyboardButtonData("Подарок", "gift"),
+			tgbotapi.NewInlineKeyboardButtonData("📨 Обратная связь", "feedback"),
+			tgbotapi.NewInlineKeyboardButtonData("🎁 Подарок", "gift"),
 		),
 	)
 	msg.ReplyMarkup = keyboard
@@ -129,26 +170,71 @@ func handleStart(bot *tgbotapi.BotAPI, chatID int64) {
 }
 
 const (
+<<<<<<< HEAD
 	feedbackURL  = "https://t.me/RyslanNovikov"
 	giftImageURL = "https://placehold.co/600x400/eee/333/png?text=Подарок+от+психолога" // заглушка, если не задан GIFT_IMAGE_URL в .env
 	giftCaption  = "🎁 Ваш подарок от психолога — короткий тест, который поможет лучше понять себя. Нажмите «Цифра дня» или перейдите далее."
+=======
+	feedbackURL = "https://t.me/RyslanNovikov"
+	giftText    = "🎁 Ваш подарок от психолога — короткий тест, который поможет лучше понять себя. Нажмите «Цифра дня» или перейдите далее."
+>>>>>>> 01f8aeaf718aa68766a5615eebabf11f1ca27d6d
 	giftWhyText            = "Этот тест помогает определить ваш текущий уровень и подобрать подходящие материалы. Займёт пару минут и даст персональную рекомендацию."
 	aiCoachIntroText       = "ИИ Психолог-Коуч — это цифровой аналитик вашего мышления.\nОн помогает увидеть скрытые смыслы через ассоциации, метафоры и персональные числовые структуры.\n\nВы можете:\n— загрузить карту и разобрать её значение\n— описать свою ситуацию и получить направляющие вопросы\n— узнать свою цифру дня\n— получить персональный числовой разбор по дате рождения"
-	aiCoachWelcomeText     = "Для работы с ботом выберите раздел (кнопку ниже) от ИИ Психолога. Если вы не знаете, что выбрать — опишите свою задачу и напишите прямо сейчас в чат. Наш консультант поможет с выбором."
-	aiCoachWelcomeImageURL = "https://placehold.co/600x400/1a1a2e/eee/png?text=ИИ+Психолог-Коуч" // заглушка; можно заменить на свой URL или задать через .env
+	aiCoachWelcomeText = "Для работы с ботом выберите раздел (кнопку ниже) от ИИ Психолога. Если вы не знаете, что выбрать — опишите свою задачу и напишите прямо сейчас в чат. Наш консультант поможет с выбором."
 )
 
 func handleCallback(bot *tgbotapi.BotAPI, q *tgbotapi.CallbackQuery, miniappURL, token string) {
 	chatID := q.Message.Chat.ID
 	callbackID := q.ID
 
+	// Сначала проверяем, не относится ли callback к опросу в разделе «Обучение».
+	if education.HandleSurveyCallback(bot, chatID, q.Data) {
+		_, _ = bot.Request(tgbotapi.NewCallback(callbackID, ""))
+		return
+	}
+
 	switch q.Data {
-	case "feedback", "main_menu_contacts":
+	case "feedback":
 		text := "У вас возникла проблема с товаром или есть другой вопрос? Напишите сюда — решим ваш вопрос:\n\n" + feedbackURL
 		msg := tgbotapi.NewMessage(chatID, text)
 		msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
 			tgbotapi.NewInlineKeyboardRow(
-				tgbotapi.NewInlineKeyboardButtonURL("Написать в Telegram", feedbackURL),
+				tgbotapi.NewInlineKeyboardButtonURL("✉️ Написать в Telegram", feedbackURL),
+			),
+			tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonData("📧 garmonia-mak@yandex.ru", "feedback_email"),
+			),
+			tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonData("💬 Пожелания по работе бота и карт", "feedback_suggestions"),
+			),
+			tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonData("⬅️ Назад", "ai_coach_back"),
+			),
+			tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonData("🏠 Главное меню", "ai_coach_main_menu"),
+			),
+		)
+		if _, err := bot.Send(msg); err != nil {
+			log.Printf("ERROR sending feedback message: %v", err)
+		}
+	case "main_menu_contacts":
+		text := "У вас возникла проблема с товаром или есть другой вопрос? Напишите сюда — решим ваш вопрос:\n\n" + feedbackURL
+		msg := tgbotapi.NewMessage(chatID, text)
+		msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
+			tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonURL("✉️ Написать в Telegram", feedbackURL),
+			),
+			tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonData("📧 garmonia-mak@yandex.ru", "feedback_email"),
+			),
+			tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonData("💬 Пожелания по работе бота и карт", "feedback_suggestions"),
+			),
+			tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonData("⬅️ Назад", "ai_coach_main_menu"),
+			),
+			tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonData("🏠 Главное меню", "ai_coach_main_menu"),
 			),
 		)
 		if _, err := bot.Send(msg); err != nil {
@@ -176,6 +262,9 @@ func handleCallback(bot *tgbotapi.BotAPI, q *tgbotapi.CallbackQuery, miniappURL,
 		card_day.Handle(bot, chatID)
 	case "ai_coach_number_day":
 		number_day.Handle(bot, chatID)
+	case "ai_coach_birth_spread":
+		// Запуск сценария расклада по дате рождения: официальный запрос номера телефона.
+		cabinet.StartRegistration(bot, chatID)
 	case "ai_coach_main_menu":
 		mainmenu.Handle(bot, chatID, miniappURL, token)
 	case "ai_coach_back":
@@ -184,8 +273,6 @@ func handleCallback(bot *tgbotapi.BotAPI, q *tgbotapi.CallbackQuery, miniappURL,
 		sendAiCoachWelcome(bot, chatID, token, miniappURL)
 	case "main_menu_education":
 		education.Handle(bot, chatID)
-	case "education_survey":
-		_, _ = bot.Send(tgbotapi.NewMessage(chatID, "Опрос в разработке. Скоро здесь можно будет пройти опрос."))
 	case "main_menu_shop":
 		shop.Handle(bot, chatID)
 	case "main_menu_cabinet":
@@ -193,15 +280,132 @@ func handleCallback(bot *tgbotapi.BotAPI, q *tgbotapi.CallbackQuery, miniappURL,
 	case "cabinet_register":
 		cabinet.StartRegistration(bot, chatID)
 	case "cabinet_profile":
-		cabinet.SendCabinetMenu(bot, chatID, "Раздел «Профиль» в разработке. Здесь будут ваши данные и настройки.")
+		cabinet.SendEditProfileMenu(bot, chatID)
 	case "cabinet_my_reviews":
 		cabinet.SendCabinetMenu(bot, chatID, "Раздел «Мои разборы» в разработке.")
 	case "cabinet_matrix":
 		cabinet.SendCabinetMenu(bot, chatID, "Раздел «Матрица по дате рождения» в разработке.")
 	case "cabinet_number_day":
-		number_day.Handle(bot, chatID)
+		// Из личного кабинета «Цифра дня» открывает то же мини‑приложение, что и в разделе «Подарок».
+		buttonURL := miniappURL
+		if strings.Contains(miniappURL, "localhost") {
+			buttonURL = "https://example.com"
+		}
+
+		replyMarkup := map[string]interface{}{
+			"inline_keyboard": [][]map[string]interface{}{
+				{
+					{"text": "Цифра дня", "web_app": map[string]string{"url": buttonURL}},
+				},
+			},
+		}
+		markupJSON, _ := json.Marshal(replyMarkup)
+
+		body := &bytes.Buffer{}
+		w := multipart.NewWriter(body)
+		_ = w.WriteField("chat_id", strconv.FormatInt(chatID, 10))
+		_ = w.WriteField("text", "Откройте мини‑приложение «Цифра дня» по кнопке ниже.")
+		_ = w.WriteField("reply_markup", string(markupJSON))
+		_ = w.Close()
+
+		req, err := http.NewRequest(http.MethodPost, "https://api.telegram.org/bot"+token+"/sendMessage", body)
+		if err != nil {
+			log.Printf("ERROR cabinet_number_day request: %v", err)
+			break
+		}
+		req.Header.Set("Content-Type", "multipart/form-data; boundary="+w.Boundary())
+
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			log.Printf("ERROR cabinet_number_day sendMessage: %v", err)
+			break
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			b, _ := io.ReadAll(resp.Body)
+			log.Printf("ERROR cabinet_number_day response: %d %s", resp.StatusCode, string(b))
+		}
 	case "cabinet_education":
 		education.Handle(bot, chatID)
+	case "cabinet_edit_phone":
+		cabinet.SendCabinetMenu(bot, chatID, "Изменение телефона пока в разработке. Сейчас изменить данные можно через поддержку.")
+	case "cabinet_edit_fio":
+		cabinet.SendCabinetMenu(bot, chatID, "Изменение ФИО пока в разработке. Сейчас изменить данные можно через поддержку.")
+	case "cabinet_edit_birthdate":
+		cabinet.SendCabinetMenu(bot, chatID, "Изменение даты рождения пока в разработке. Сейчас изменить данные можно через поддержку.")
+	case "feedback_email":
+		emailMsg := tgbotapi.NewMessage(chatID, "Вы можете написать нам на электронную почту:\n\n📧 garmonia-mak@yandex.ru")
+		emailMsg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
+			tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonData("🏠 Главное меню", "ai_coach_main_menu"),
+			),
+		)
+		if _, err := bot.Send(emailMsg); err != nil {
+			log.Printf("ERROR sending feedback email message: %v", err)
+		}
+	case "feedback_suggestions":
+		msg := tgbotapi.NewMessage(chatID, "Поделитесь, пожалуйста, вашими пожеланиями или вопросами по работе бота и метафорических карт.\n\nПросто напишите их следующим сообщением в чат.")
+		msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
+			tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonData("🏠 Главное меню", "ai_coach_main_menu"),
+			),
+		)
+		if _, err := bot.Send(msg); err != nil {
+			log.Printf("ERROR sending feedback suggestions message: %v", err)
+		}
+	case "question_end":
+		question.EndSession(chatID)
+
+		// Те же кнопки, что и в разделе «ИИ Психолог-Коуч» (включая кнопку Mini App «Цифра дня»).
+		buttonURL := miniappURL
+		if strings.Contains(miniappURL, "localhost") {
+			buttonURL = "https://example.com"
+		}
+
+		replyMarkup := map[string]interface{}{
+			"inline_keyboard": [][]map[string]interface{}{
+				{
+					{"text": "❓ Вопрос", "callback_data": "ai_coach_question"},
+					{"text": "🧩 Техника", "callback_data": "ai_coach_technique"},
+				},
+				{
+					{"text": "🃏 Расшифровка карты", "callback_data": "ai_coach_card_decode"},
+				},
+				{
+					{"text": "🗓️ Карта дня", "callback_data": "ai_coach_card_day"},
+					{"text": "🔢 Цифра дня", "web_app": map[string]string{"url": buttonURL}},
+				},
+				{
+					{"text": "🏠 Главное меню", "callback_data": "ai_coach_main_menu"},
+				},
+			},
+		}
+		markupJSON, _ := json.Marshal(replyMarkup)
+
+		body := &bytes.Buffer{}
+		w := multipart.NewWriter(body)
+		_ = w.WriteField("chat_id", strconv.FormatInt(chatID, 10))
+		_ = w.WriteField("text", "Диалог с ИИ Психолог-Коуч завершён. Если захотите продолжить, снова нажмите кнопку «Вопрос» в разделе ИИ Психолог-Коуч.")
+		_ = w.WriteField("reply_markup", string(markupJSON))
+		_ = w.Close()
+
+		req, err := http.NewRequest(http.MethodPost, "https://api.telegram.org/bot"+token+"/sendMessage", body)
+		if err != nil {
+			log.Printf("ERROR question_end request: %v", err)
+			break
+		}
+		req.Header.Set("Content-Type", "multipart/form-data; boundary="+w.Boundary())
+
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			log.Printf("ERROR question_end sendMessage: %v", err)
+			break
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			b, _ := io.ReadAll(resp.Body)
+			log.Printf("ERROR question_end response: %d %s", resp.StatusCode, string(b))
+		}
 	default:
 		_, _ = bot.Request(tgbotapi.NewCallback(callbackID, ""))
 		return
@@ -210,6 +414,7 @@ func handleCallback(bot *tgbotapi.BotAPI, q *tgbotapi.CallbackQuery, miniappURL,
 	_, _ = bot.Request(tgbotapi.NewCallback(callbackID, ""))
 }
 
+<<<<<<< HEAD
 // resolveGiftImagePath возвращает путь к assets/gift.png в корне проекта, если файл есть.
 func resolveGiftImagePath() string {
 	p := filepath.Join("assets", "gift.png")
@@ -227,22 +432,73 @@ func sendGiftMessage(_ *tgbotapi.BotAPI, chatID int64, miniappURL, token string)
 	if imageURL == "" {
 		imageURL = giftImageURL
 	}
+=======
+// Картинка «Подарок» — только с диска. В этом коде нет отправки по URL (заглушек нет).
+const giftImageDir = "/opt/mak_kart_allk_bot/cmd/bot/images"
+const giftImageName = "number_day.png"
+
+func sendGiftMessage(bot *tgbotapi.BotAPI, chatID int64, miniappURL, token string) {
+>>>>>>> 01f8aeaf718aa68766a5615eebabf11f1ca27d6d
 	buttonURL := miniappURL
 	if strings.Contains(miniappURL, "localhost") {
 		buttonURL = "https://example.com"
 	}
 	replyMarkup := map[string]interface{}{
 		"inline_keyboard": [][]map[string]interface{}{
-			{{"text": "Цифра дня", "web_app": map[string]string{"url": buttonURL}}},
-			{{"text": "Далее", "callback_data": "gift_next"}},
+			{{"text": "🔢 Цифра дня", "web_app": map[string]string{"url": buttonURL}}},
+			{{"text": "➡️ Далее", "callback_data": "gift_next"}},
 		},
 	}
 	markupJSON, _ := json.Marshal(replyMarkup)
 
+	giftPath := filepath.Join(giftImageDir, giftImageName)
+
+	if giftPath != "" {
+		f, err := os.Open(giftPath)
+		if err != nil {
+			log.Printf("ERROR gift: не удалось открыть %q: %v", giftPath, err)
+		} else {
+			defer f.Close()
+			log.Printf("gift: ОТПРАВЛЯЮ КАРТИНКУ С ДИСКА (не заглушка): %s", giftPath)
+			body := &bytes.Buffer{}
+			w := multipart.NewWriter(body)
+			_ = w.WriteField("chat_id", strconv.FormatInt(chatID, 10))
+			part, _ := w.CreateFormFile("photo", giftImageName)
+			_, _ = io.Copy(part, f)
+			_ = w.WriteField("caption", giftText)
+			_ = w.WriteField("reply_markup", string(markupJSON))
+			_ = w.Close()
+			req, err := http.NewRequest(http.MethodPost, "https://api.telegram.org/bot"+token+"/sendPhoto", body)
+			if err != nil {
+				log.Printf("ERROR sendGiftMessage request: %v", err)
+				return
+			}
+			req.Header.Set("Content-Type", "multipart/form-data; boundary="+w.Boundary())
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				log.Printf("ERROR sendGiftMessage: %v", err)
+				return
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode == http.StatusOK {
+				return
+			}
+			b, _ := io.ReadAll(resp.Body)
+			log.Printf("ERROR sendPhoto (gift) response: %d %s", resp.StatusCode, string(b))
+			return
+		}
+	}
+
+	// Файл не найден — только текст (без картинки). Заглушки по URL в коде нет.
+	log.Printf("WARNING gift: файл не найден, отправляю ТОЛЬКО ТЕКСТ (без фото): %s", giftPath)
 	body := &bytes.Buffer{}
 	w := multipart.NewWriter(body)
 	_ = w.WriteField("chat_id", strconv.FormatInt(chatID, 10))
+<<<<<<< HEAD
 	_ = w.WriteField("caption", giftCaption)
+=======
+	_ = w.WriteField("text", giftText)
+>>>>>>> 01f8aeaf718aa68766a5615eebabf11f1ca27d6d
 	_ = w.WriteField("reply_markup", string(markupJSON))
 	if giftFilePath != "" {
 		f, err := os.Open(giftFilePath)
@@ -258,14 +514,12 @@ func sendGiftMessage(_ *tgbotapi.BotAPI, chatID int64, miniappURL, token string)
 		_ = w.WriteField("photo", imageURL)
 	}
 	_ = w.Close()
-
-	req, err := http.NewRequest(http.MethodPost, "https://api.telegram.org/bot"+token+"/sendPhoto", body)
+	req, err := http.NewRequest(http.MethodPost, "https://api.telegram.org/bot"+token+"/sendMessage", body)
 	if err != nil {
 		log.Printf("ERROR sendGiftMessage request: %v", err)
 		return
 	}
 	req.Header.Set("Content-Type", "multipart/form-data; boundary="+w.Boundary())
-
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		log.Printf("ERROR sendGiftMessage: %v", err)
@@ -274,27 +528,23 @@ func sendGiftMessage(_ *tgbotapi.BotAPI, chatID int64, miniappURL, token string)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		b, _ := io.ReadAll(resp.Body)
-		log.Printf("ERROR sendPhoto response: %d %s", resp.StatusCode, string(b))
+		log.Printf("ERROR sendMessage (gift) response: %d %s", resp.StatusCode, string(b))
 	}
 }
 
-// Главное меню после «Далее»: ИИ-психолог Коуч первым, затем Мини рулетка, Обучение, Контакты, Магазин, Назад.
-// Приветственное сообщение после «Далее» в разделе ИИ Психолог-Коуч — фото с подписью и кнопками.
+// Приветственное сообщение раздела ИИ Психолог-Коуч — только текст и кнопки (без картинки-заглушки).
 func sendAiCoachWelcome(_ *tgbotapi.BotAPI, chatID int64, token, miniappURL string) {
-	imageURL := strings.TrimSpace(os.Getenv("AI_COACH_WELCOME_IMAGE"))
-	if imageURL == "" {
-		imageURL = aiCoachWelcomeImageURL
-	}
 	buttonURL := miniappURL
 	if strings.Contains(miniappURL, "localhost") {
 		buttonURL = "https://example.com"
 	}
 	replyMarkup := map[string]interface{}{
 		"inline_keyboard": [][]map[string]interface{}{
-			{{"text": "Вопрос", "callback_data": "ai_coach_question"}, {"text": "Техника", "callback_data": "ai_coach_technique"}},
-			{{"text": "Расшифровка карты", "callback_data": "ai_coach_card_decode"}},
-			{{"text": "Карта дня", "callback_data": "ai_coach_card_day"}, {"text": "Цифра дня", "web_app": map[string]string{"url": buttonURL}}},
-			{{"text": "Главное меню", "callback_data": "ai_coach_main_menu"}},
+			{{"text": "❓ Вопрос", "callback_data": "ai_coach_question"}, {"text": "🧩 Техника", "callback_data": "ai_coach_technique"}},
+			{{"text": "🃏 Расшифровка карты", "callback_data": "ai_coach_card_decode"}},
+			{{"text": "🗓️ Карта дня", "callback_data": "ai_coach_card_day"}, {"text": "🔢 Цифра дня", "web_app": map[string]string{"url": buttonURL}}},
+			{{"text": "✨ Получить расклад по дате рождения", "callback_data": "ai_coach_birth_spread"}},
+			{{"text": "🏠 Главное меню", "callback_data": "ai_coach_main_menu"}},
 		},
 	}
 	markupJSON, _ := json.Marshal(replyMarkup)
@@ -302,12 +552,11 @@ func sendAiCoachWelcome(_ *tgbotapi.BotAPI, chatID int64, token, miniappURL stri
 	body := &bytes.Buffer{}
 	w := multipart.NewWriter(body)
 	_ = w.WriteField("chat_id", strconv.FormatInt(chatID, 10))
-	_ = w.WriteField("photo", imageURL)
-	_ = w.WriteField("caption", aiCoachWelcomeText)
+	_ = w.WriteField("text", aiCoachWelcomeText)
 	_ = w.WriteField("reply_markup", string(markupJSON))
 	_ = w.Close()
 
-	req, err := http.NewRequest(http.MethodPost, "https://api.telegram.org/bot"+token+"/sendPhoto", body)
+	req, err := http.NewRequest(http.MethodPost, "https://api.telegram.org/bot"+token+"/sendMessage", body)
 	if err != nil {
 		log.Printf("ERROR sendAiCoachWelcome request: %v", err)
 		return
@@ -322,7 +571,7 @@ func sendAiCoachWelcome(_ *tgbotapi.BotAPI, chatID int64, token, miniappURL stri
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		b, _ := io.ReadAll(resp.Body)
-		log.Printf("ERROR sendPhoto (ai_coach welcome) response: %d %s", resp.StatusCode, string(b))
+		log.Printf("ERROR sendMessage (ai_coach welcome) response: %d %s", resp.StatusCode, string(b))
 	}
 }
 

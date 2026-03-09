@@ -75,6 +75,11 @@ func Handle(bot *tgbotapi.BotAPI, chatID int64) {
 	})
 
 	msg := tgbotapi.NewMessage(chatID, text)
+	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("🛑 Завершить диалог", "question_end"),
+		),
+	)
 	if _, err := bot.Send(msg); err != nil {
 		log.Printf("ERROR sending question message: %v", err)
 	}
@@ -151,6 +156,11 @@ func HandleUserMessage(bot *tgbotapi.BotAPI, chatID int64, userText string) bool
 	sessionsMu.Unlock()
 
 	msg := tgbotapi.NewMessage(chatID, reply)
+	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("🛑 Завершить диалог", "question_end"),
+		),
+	)
 	if _, err := bot.Send(msg); err != nil {
 		log.Printf("ERROR sending question dialog message: %v", err)
 	}
@@ -160,6 +170,11 @@ func HandleUserMessage(bot *tgbotapi.BotAPI, chatID int64, userText string) bool
 
 func sendFallback(bot *tgbotapi.BotAPI, chatID int64, text string) {
 	msg := tgbotapi.NewMessage(chatID, text)
+	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("🛑 Завершить диалог", "question_end"),
+		),
+	)
 	if _, err := bot.Send(msg); err != nil {
 		log.Printf("ERROR sending question fallback: %v", err)
 	}
@@ -173,4 +188,12 @@ func saveSession(chatID int64, messages []openai.Message) {
 	sessions[chatID] = &chatSession{
 		Messages: messages,
 	}
+}
+
+// EndSession завершает диалог «Вопрос» для чата (очищает историю).
+func EndSession(chatID int64) {
+	sessionsMu.Lock()
+	defer sessionsMu.Unlock()
+
+	delete(sessions, chatID)
 }
