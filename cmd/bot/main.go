@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"log"
@@ -21,6 +22,7 @@ import (
 	"mak_kart_allk_bot/handlers/question"
 	"mak_kart_allk_bot/handlers/shop"
 	"mak_kart_allk_bot/handlers/technique"
+	"mak_kart_allk_bot/internal/api"
 	"mak_kart_allk_bot/internal/db"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
@@ -41,6 +43,11 @@ func main() {
 		log.Fatalf("db init: %v", err)
 	}
 	log.Println("DB connected OK")
+
+	if err := db.EnsureProfileTable(context.Background()); err != nil {
+		log.Fatalf("db ensure profile table: %v", err)
+	}
+	log.Println("DB profile table OK")
 
 	token := strings.TrimSpace(os.Getenv("BOT_TOKEN"))
 	if token == "" {
@@ -68,6 +75,20 @@ func main() {
 	} else {
 		log.Println("Webhook removed OK")
 	}
+
+	// HTTP API для мини‑приложения (сохранение профиля: ФИО, дата рождения, Telegram ID).
+	apiPort := strings.TrimSpace(os.Getenv("API_PORT"))
+	if apiPort == "" {
+		apiPort = "8080"
+	}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/profile", api.ProfileHandler(token))
+	go func() {
+		log.Printf("API listening on :%s", apiPort)
+		if err := http.ListenAndServe(":"+apiPort, mux); err != nil {
+			log.Printf("API server error: %v", err)
+		}
+	}()
 
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = 60

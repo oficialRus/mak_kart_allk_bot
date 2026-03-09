@@ -21,7 +21,6 @@ const toRad = (deg: number) => (deg * Math.PI) / 180;
 type Profile = {
   fullName: string;
   birthDate: string;
-  phone: string;
 };
 
 const STORAGE_KEY_PROFILE = "garmonia_compass_profile_v1";
@@ -91,7 +90,6 @@ export default function App() {
   const [profileForm, setProfileForm] = useState<Profile>({
     fullName: "",
     birthDate: "",
-    phone: "",
   });
   const [profileErrors, setProfileErrors] = useState<Partial<Record<keyof Profile, string>>>({});
   const [isProfileSubmitting, setIsProfileSubmitting] = useState(false);
@@ -154,7 +152,7 @@ export default function App() {
       const raw = window.localStorage.getItem(STORAGE_KEY_PROFILE);
       if (!raw) return;
       const parsed = JSON.parse(raw) as Profile;
-      if (!parsed.fullName || !parsed.birthDate || !parsed.phone) return;
+      if (!parsed.fullName || !parsed.birthDate) return;
       setProfile(parsed);
       setProfileForm(parsed);
     } catch {
@@ -166,7 +164,7 @@ export default function App() {
   useEffect(() => {
     if (!profile) return;
     const todayKey = getTodayKey();
-    const key = `${profile.fullName}|${profile.birthDate}|${profile.phone}|${todayKey}`;
+    const key = `${profile.fullName}|${profile.birthDate}|${todayKey}`;
     const idx = hashStringToIndex(key, SECTOR_COUNT);
     setDailyIndex(idx);
     // Сбрасываем отображение результата до первого осознанного нажатия "Крутить".
@@ -179,14 +177,13 @@ export default function App() {
     setProfileErrors((prev) => ({ ...prev, [field]: undefined }));
   };
 
-  const handleProfileSubmit = (e: any) => {
+  const handleProfileSubmit = async (e: any) => {
     e.preventDefault();
     if (isProfileSubmitting) return;
 
     const errors: Partial<Record<keyof Profile, string>> = {};
     if (!profileForm.fullName.trim()) errors.fullName = "Введите ФИО";
     if (!profileForm.birthDate.trim()) errors.birthDate = "Введите дату рождения";
-    if (!profileForm.phone.trim()) errors.phone = "Введите номер телефона";
 
     if (Object.keys(errors).length > 0) {
       setProfileErrors(errors);
@@ -197,16 +194,33 @@ export default function App() {
     const cleanProfile: Profile = {
       fullName: profileForm.fullName.trim(),
       birthDate: profileForm.birthDate.trim(),
-      phone: profileForm.phone.trim(),
     };
     try {
       window.localStorage.setItem(STORAGE_KEY_PROFILE, JSON.stringify(cleanProfile));
     } catch {
       // ignore
     }
+    // Отправка профиля на бэкенд (ФИО, дата рождения, Telegram ID из initData).
+    const apiBase = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
+    const initData = (window as unknown as { Telegram?: { WebApp?: { initData?: string } } }).Telegram?.WebApp?.initData ?? "";
+    try {
+      const res = await fetch(`${apiBase}/api/profile`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          initData,
+          fullName: cleanProfile.fullName,
+          birthDate: cleanProfile.birthDate,
+        }),
+      });
+      if (!res.ok) {
+        console.warn("Profile API error:", res.status, await res.text());
+      }
+    } catch (e) {
+      console.warn("Profile API request failed:", e);
+    }
     setProfile(cleanProfile);
     setIsProfileSubmitting(false);
-    // TODO: когда появится backend API, отправлять cleanProfile в handlers/cabinet.
   };
 
   const handleResetProfile = () => {
@@ -219,7 +233,6 @@ export default function App() {
     setProfileForm({
       fullName: "",
       birthDate: "",
-      phone: "",
     });
     setProfileErrors({});
     setDailyIndex(null);
@@ -292,18 +305,6 @@ export default function App() {
                 onChange={(e) => handleProfileChange("birthDate", e.target.value)}
               />
               {profileErrors.birthDate && <span className="onboarding-error">{profileErrors.birthDate}</span>}
-            </label>
-
-            <label className="onboarding-field">
-              <span className="onboarding-label">Телефон</span>
-              <input
-                type="tel"
-                className={`onboarding-input ${profileErrors.phone ? "has-error" : ""}`}
-                placeholder="+7 ..."
-                value={profileForm.phone}
-                onChange={(e) => handleProfileChange("phone", e.target.value)}
-              />
-              {profileErrors.phone && <span className="onboarding-error">{profileErrors.phone}</span>}
             </label>
 
             <button type="submit" className="spin-button" disabled={isProfileSubmitting}>
