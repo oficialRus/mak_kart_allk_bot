@@ -8,6 +8,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -128,9 +129,9 @@ func handleStart(bot *tgbotapi.BotAPI, chatID int64) {
 }
 
 const (
-	feedbackURL            = "https://t.me/RyslanNovikov"
-	giftImageURL           = "https://placehold.co/600x400/eee/333/png?text=Подарок+от+психолога" // заглушка картинки
-	giftCaption            = "🎁 Ваш подарок от психолога — короткий тест, который поможет лучше понять себя. Нажмите «Цифра дня» или перейдите далее."
+	feedbackURL  = "https://t.me/RyslanNovikov"
+	giftImageURL = "https://placehold.co/600x400/eee/333/png?text=Подарок+от+психолога" // заглушка, если не задан GIFT_IMAGE_URL в .env
+	giftCaption  = "🎁 Ваш подарок от психолога — короткий тест, который поможет лучше понять себя. Нажмите «Цифра дня» или перейдите далее."
 	giftWhyText            = "Этот тест помогает определить ваш текущий уровень и подобрать подходящие материалы. Займёт пару минут и даст персональную рекомендацию."
 	aiCoachIntroText       = "ИИ Психолог-Коуч — это цифровой аналитик вашего мышления.\nОн помогает увидеть скрытые смыслы через ассоциации, метафоры и персональные числовые структуры.\n\nВы можете:\n— загрузить карту и разобрать её значение\n— описать свою ситуацию и получить направляющие вопросы\n— узнать свою цифру дня\n— получить персональный числовой разбор по дате рождения"
 	aiCoachWelcomeText     = "Для работы с ботом выберите раздел (кнопку ниже) от ИИ Психолога. Если вы не знаете, что выбрать — опишите свою задачу и напишите прямо сейчас в чат. Наш консультант поможет с выбором."
@@ -209,8 +210,23 @@ func handleCallback(bot *tgbotapi.BotAPI, q *tgbotapi.CallbackQuery, miniappURL,
 	_, _ = bot.Request(tgbotapi.NewCallback(callbackID, ""))
 }
 
+// resolveGiftImagePath возвращает путь к assets/gift.png в корне проекта, если файл есть.
+func resolveGiftImagePath() string {
+	p := filepath.Join("assets", "gift.png")
+	if _, err := os.Stat(p); err == nil {
+		return p
+	}
+	return ""
+}
+
 // Под фото — две кнопки: «Открыть тест», «Далее».
+// Картинка: assets/gift.png (если есть) → GIFT_IMAGE_URL → заглушка по ссылке.
 func sendGiftMessage(_ *tgbotapi.BotAPI, chatID int64, miniappURL, token string) {
+	giftFilePath := resolveGiftImagePath()
+	imageURL := strings.TrimSpace(os.Getenv("GIFT_IMAGE_URL"))
+	if imageURL == "" {
+		imageURL = giftImageURL
+	}
 	buttonURL := miniappURL
 	if strings.Contains(miniappURL, "localhost") {
 		buttonURL = "https://example.com"
@@ -226,9 +242,21 @@ func sendGiftMessage(_ *tgbotapi.BotAPI, chatID int64, miniappURL, token string)
 	body := &bytes.Buffer{}
 	w := multipart.NewWriter(body)
 	_ = w.WriteField("chat_id", strconv.FormatInt(chatID, 10))
-	_ = w.WriteField("photo", giftImageURL)
 	_ = w.WriteField("caption", giftCaption)
 	_ = w.WriteField("reply_markup", string(markupJSON))
+	if giftFilePath != "" {
+		f, err := os.Open(giftFilePath)
+		if err != nil {
+			log.Printf("WARNING: cannot open gift image %s: %v, using URL", giftFilePath, err)
+			_ = w.WriteField("photo", imageURL)
+		} else {
+			part, _ := w.CreateFormFile("photo", filepath.Base(giftFilePath))
+			_, _ = io.Copy(part, f)
+			_ = f.Close()
+		}
+	} else {
+		_ = w.WriteField("photo", imageURL)
+	}
 	_ = w.Close()
 
 	req, err := http.NewRequest(http.MethodPost, "https://api.telegram.org/bot"+token+"/sendPhoto", body)
