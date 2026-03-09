@@ -127,12 +127,15 @@ export default function App() {
     // Какой сектор (0..8) и его цифра (1..9) должны оказаться под указателем (верх)
     const nextWinningIndex = Math.floor(Math.random() * SECTOR_COUNT);
     // В polar верх = 90°. Центр сектора k: -70 + k*40.
-    // Для CSS-вращения (по часовой стрелке) условие такое:
-    // -rotationCss + segmentCenterDeg = pointerAngle
-    // => rotationCss = segmentCenterDeg - pointerAngle
+    // Для CSS-вращения (по часовой стрелке) хотим, чтобы
+    //   segmentCenterDeg - finalRotation ≡ pointerAngle (mod 360)
+    // У нас finalRotation = rotation + extraSpins*360 + targetOffset,
+    // поэтому учитываем текущий угол rotation по модулю 360:
     const segmentCenterDeg = -90 + (nextWinningIndex + 0.5) * SECTOR_ANGLE;
     const pointerAngle = 90;
-    const targetOffset = ((segmentCenterDeg - pointerAngle) % 360 + 360) % 360;
+    const normalizedRotation = ((rotation % 360) + 360) % 360;
+    const delta = segmentCenterDeg - pointerAngle - normalizedRotation;
+    const targetOffset = ((delta % 360) + 360) % 360;
     const extraSpins = 5 + Math.floor(Math.random() * 2);
     const nextRotation = rotation + extraSpins * 360 + targetOffset;
 
