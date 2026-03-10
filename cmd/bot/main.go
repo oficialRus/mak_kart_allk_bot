@@ -251,6 +251,40 @@ func handleCallback(bot *tgbotapi.BotAPI, q *tgbotapi.CallbackQuery, miniappURL,
 		question.Handle(bot, chatID)
 	case "ai_coach_technique":
 		technique.Handle(bot, chatID)
+	case "technique_1":
+		technique.HandleTechnique1(bot, chatID)
+	case "technique_2":
+		technique.HandleTechnique2(bot, chatID)
+	case "technique_3":
+		technique.HandleTechnique3(bot, chatID)
+	case "technique_4":
+		technique.HandleTechnique4(bot, chatID)
+	case "technique_5":
+		technique.HandleTechnique5(bot, chatID)
+	case "technique_6":
+		technique.HandleTechnique6(bot, chatID)
+	case "technique_7":
+		technique.HandleTechnique7(bot, chatID)
+	case "technique_8":
+		technique.HandleTechnique8(bot, chatID)
+	case "technique_discuss":
+		// Из текста сообщения берём название и описание техники
+		title := ""
+		description := ""
+		if q.Message != nil {
+			full := strings.TrimSpace(q.Message.Text)
+			if full != "" {
+				parts := strings.SplitN(full, "\n", 2)
+				title = strings.TrimSpace(parts[0])
+				if len(parts) > 1 {
+					description = strings.TrimSpace(parts[1])
+				}
+			}
+		}
+		if title == "" {
+			title = "Психологическая техника"
+		}
+		question.HandleWithTechnique(bot, chatID, title, description)
 	case "ai_coach_card_decode":
 		card_decode.Handle(bot, chatID)
 	case "ai_coach_card_day":
@@ -362,8 +396,8 @@ func handleCallback(bot *tgbotapi.BotAPI, q *tgbotapi.CallbackQuery, miniappURL,
 		replyMarkup := map[string]interface{}{
 			"inline_keyboard": [][]map[string]interface{}{
 				{
-					{"text": "❓ Вопрос", "callback_data": "ai_coach_question"},
-					{"text": "🧩 Техника", "callback_data": "ai_coach_technique"},
+					{"text": "💬 Диалог", "callback_data": "ai_coach_question"},
+					{"text": "🧩 Техники", "callback_data": "ai_coach_technique"},
 				},
 				{
 					{"text": "🃏 Расшифровка карты", "callback_data": "ai_coach_card_decode"},
@@ -411,9 +445,10 @@ func handleCallback(bot *tgbotapi.BotAPI, q *tgbotapi.CallbackQuery, miniappURL,
 	_, _ = bot.Request(tgbotapi.NewCallback(callbackID, ""))
 }
 
-// Картинка «Подарок» — только с диска. В этом коде нет отправки по URL (заглушек нет).
+// Картинки с диска.
 const giftImageDir = "cmd/bot/images"
 const giftImageName = "number_day.png"
+const aiCoachWelcomeImagePath = "cmd/bot/images/ai_coach_welcome.png"
 
 func sendGiftMessage(bot *tgbotapi.BotAPI, chatID int64, miniappURL, token string) {
 	buttonURL := miniappURL
@@ -493,7 +528,7 @@ func sendGiftMessage(bot *tgbotapi.BotAPI, chatID int64, miniappURL, token strin
 	}
 }
 
-// Приветственное сообщение раздела ИИ Психолог-Коуч — только текст и кнопки (без картинки-заглушки).
+// Приветственное сообщение раздела ИИ Психолог-Коуч — картинка + текст и кнопки.
 func sendAiCoachWelcome(_ *tgbotapi.BotAPI, chatID int64, token, miniappURL string) {
 	buttonURL := miniappURL
 	if strings.Contains(miniappURL, "localhost") {
@@ -501,7 +536,7 @@ func sendAiCoachWelcome(_ *tgbotapi.BotAPI, chatID int64, token, miniappURL stri
 	}
 	replyMarkup := map[string]interface{}{
 		"inline_keyboard": [][]map[string]interface{}{
-			{{"text": "❓ Вопрос", "callback_data": "ai_coach_question"}, {"text": "🧩 Техника", "callback_data": "ai_coach_technique"}},
+			{{"text": "💬 Диалог", "callback_data": "ai_coach_question"}, {"text": "🧩 Техники", "callback_data": "ai_coach_technique"}},
 			{{"text": "🃏 Расшифровка карты", "callback_data": "ai_coach_card_decode"}},
 			{{"text": "🗓️ Карта дня", "callback_data": "ai_coach_card_day"}, {"text": "🔢 Цифра дня", "web_app": map[string]string{"url": buttonURL}}},
 			{{"text": "✨ Получить расклад по дате рождения", "callback_data": "ai_coach_birth_spread"}},
@@ -510,6 +545,45 @@ func sendAiCoachWelcome(_ *tgbotapi.BotAPI, chatID int64, token, miniappURL stri
 	}
 	markupJSON, _ := json.Marshal(replyMarkup)
 
+	// Пытаемся отправить картинку с подписью и кнопками.
+	if aiCoachWelcomeImagePath != "" {
+		f, err := os.Open(aiCoachWelcomeImagePath)
+		if err != nil {
+			log.Printf("ERROR sendAiCoachWelcome: open image %q: %v", aiCoachWelcomeImagePath, err)
+		} else {
+			defer f.Close()
+			body := &bytes.Buffer{}
+			w := multipart.NewWriter(body)
+			_ = w.WriteField("chat_id", strconv.FormatInt(chatID, 10))
+			part, _ := w.CreateFormFile("photo", filepath.Base(aiCoachWelcomeImagePath))
+			_, _ = io.Copy(part, f)
+			_ = w.WriteField("caption", aiCoachWelcomeText)
+			_ = w.WriteField("reply_markup", string(markupJSON))
+			_ = w.Close()
+
+			req, err := http.NewRequest(http.MethodPost, "https://api.telegram.org/bot"+token+"/sendPhoto", body)
+			if err != nil {
+				log.Printf("ERROR sendAiCoachWelcome sendPhoto request: %v", err)
+				return
+			}
+			req.Header.Set("Content-Type", "multipart/form-data; boundary="+w.Boundary())
+
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				log.Printf("ERROR sendAiCoachWelcome sendPhoto: %v", err)
+				return
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode == http.StatusOK {
+				return
+			}
+			b, _ := io.ReadAll(resp.Body)
+			log.Printf("ERROR sendAiCoachWelcome sendPhoto response: %d %s", resp.StatusCode, string(b))
+			// При ошибке ниже отправим текстовый вариант.
+		}
+	}
+
+	// Фоллбэк: если не удалось отправить картинку, шлём только текст с кнопками.
 	body := &bytes.Buffer{}
 	w := multipart.NewWriter(body)
 	_ = w.WriteField("chat_id", strconv.FormatInt(chatID, 10))
@@ -519,20 +593,20 @@ func sendAiCoachWelcome(_ *tgbotapi.BotAPI, chatID int64, token, miniappURL stri
 
 	req, err := http.NewRequest(http.MethodPost, "https://api.telegram.org/bot"+token+"/sendMessage", body)
 	if err != nil {
-		log.Printf("ERROR sendAiCoachWelcome request: %v", err)
+		log.Printf("ERROR sendAiCoachWelcome fallback request: %v", err)
 		return
 	}
 	req.Header.Set("Content-Type", "multipart/form-data; boundary="+w.Boundary())
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		log.Printf("ERROR sendAiCoachWelcome: %v", err)
+		log.Printf("ERROR sendAiCoachWelcome fallback: %v", err)
 		return
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		b, _ := io.ReadAll(resp.Body)
-		log.Printf("ERROR sendMessage (ai_coach welcome) response: %d %s", resp.StatusCode, string(b))
+		log.Printf("ERROR sendMessage (ai_coach welcome fallback) response: %d %s", resp.StatusCode, string(b))
 	}
 }
 

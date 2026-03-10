@@ -2,6 +2,7 @@ package question
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"strings"
@@ -41,29 +42,16 @@ func Handle(bot *tgbotapi.BotAPI, chatID int64) {
 		return
 	}
 
-	resp, userErr := openai.ChatCompletion(
-		context.Background(),
-		apiKey,
-		openai.Request{
-			Model: openai.DefaultModel,
-			Messages: []openai.Message{
-				{Role: "system", Content: systemPrompt},
-				{Role: "user", Content: userPrompt},
-			},
-		},
-	)
-	if userErr != nil {
-		sendFallback(bot, chatID, userErr.Text)
-		return
-	}
+	text := `Ты можешь задать любой вопрос ИИ-психологу.
 
-	text := ""
-	if len(resp.Choices) > 0 {
-		text = strings.TrimSpace(resp.Choices[0].Message.Content)
-	}
-	if text == "" {
-		text = "Раздел «Вопрос» в разработке. Вы можете описать свою ситуацию прямо в чате."
-	}
+Он поможет тебе:
+— расшифровать выпавшую карту
+— разобрать ситуацию через цифровую психологию
+— получить психологическую технику
+— понять послание метафорической карты
+
+Напиши свой вопрос и начни диалог.`
+
 	if len(text) > maxReplyLen {
 		text = text[:maxReplyLen-3] + "..."
 	}
@@ -82,6 +70,65 @@ func Handle(bot *tgbotapi.BotAPI, chatID int64) {
 	)
 	if _, err := bot.Send(msg); err != nil {
 		log.Printf("ERROR sending question message: %v", err)
+	}
+}
+
+// HandleWithTechnique запускает диалог с ИИ, передавая контекст выбранной техники.
+func HandleWithTechnique(bot *tgbotapi.BotAPI, chatID int64, techniqueTitle, techniqueDescription string) {
+	apiKey := strings.TrimSpace(os.Getenv("OPENAI_API_KEY"))
+	if apiKey == "" {
+		sendFallback(bot, chatID, "ИИ-ответы временно недоступны. Задайте OPENAI_API_KEY в .env и перезапустите бота.")
+		return
+	}
+
+	contextPrompt := fmt.Sprintf(
+		"Пользователь хочет разобрать психологическую технику.\n\nТехника: %s\n\nОписание техники:\n%s\n\nПомоги пользователю:\n— объяснить технику\n— разобрать ситуацию через неё\n— задать вопросы\n— провести через практику.\n\nНачни с краткого объяснения смысла техники простым языком и задай 1–2 уточняющих вопроса по его ситуации.",
+		strings.TrimSpace(techniqueTitle),
+		strings.TrimSpace(techniqueDescription),
+	)
+
+	resp, userErr := openai.ChatCompletion(
+		context.Background(),
+		apiKey,
+		openai.Request{
+			Model: openai.DefaultModel,
+			Messages: []openai.Message{
+				{Role: "system", Content: systemPrompt},
+				{Role: "user", Content: contextPrompt},
+			},
+		},
+	)
+	if userErr != nil {
+		sendFallback(bot, chatID, userErr.Text)
+		return
+	}
+
+	text := ""
+	if len(resp.Choices) > 0 {
+		text = strings.TrimSpace(resp.Choices[0].Message.Content)
+	}
+	if text == "" {
+		text = "Давай разберём эту технику вместе. Опиши, пожалуйста, свою ситуацию или вопрос, с которым ты хочешь поработать."
+	}
+	if len(text) > maxReplyLen {
+		text = text[:maxReplyLen-3] + "..."
+	}
+
+	// сохраняем/обнуляем сессию: system + контекст техники (как user) + первое сообщение ассистента
+	saveSession(chatID, []openai.Message{
+		{Role: "system", Content: systemPrompt},
+		{Role: "user", Content: contextPrompt},
+		{Role: "assistant", Content: text},
+	})
+
+	msg := tgbotapi.NewMessage(chatID, text)
+	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("🛑 Завершить диалог", "question_end"),
+		),
+	)
+	if _, err := bot.Send(msg); err != nil {
+		log.Printf("ERROR sending technique question message: %v", err)
 	}
 }
 

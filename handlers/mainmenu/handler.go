@@ -41,7 +41,8 @@ func Handle(bot *tgbotapi.BotAPI, chatID int64, miniappURL, token string) {
 	markupJSON, _ := json.Marshal(replyMarkup)
 
 	// Пытаемся отправить картинку главного меню как фото с подписью и кнопками.
-	imagePath := filepath.Join("assets", "main_menu.png")
+	// Все картинки храним в cmd/bot/images.
+	imagePath := filepath.Join("cmd", "bot", "images", "main_menu.png")
 	if f, err := os.Open(imagePath); err == nil {
 		defer f.Close()
 
