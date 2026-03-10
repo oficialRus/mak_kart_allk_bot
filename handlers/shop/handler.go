@@ -9,12 +9,14 @@ import (
 )
 
 const (
-	shopPlaceholderURL = "https://placehold.co/600x400/1e3a5f/eee/png?text=Магазин"
-	shopCaption        = "Магазин — здесь вы можете выбрать товары и услуги."
-	defaultShopURL     = "https://example.com/shop" // замените на свой URL или задайте SHOP_URL в .env
+	// Локальное изображение для раздела «Магазин».
+	shopImagePath = "cmd/bot/images/shop.png"
+	// Подпись к картинке.
+	shopCaption    = "Магазин — здесь вы можете выбрать товары и услуги."
+	defaultShopURL = "https://example.com/shop" // замените на свой URL или задайте SHOP_URL в .env
 )
 
-// Handle обрабатывает нажатие на кнопку «Магазин»: отправляет фото-заглушку
+// Handle обрабатывает нажатие на кнопку «Магазин»: отправляет картинку раздела
 // и кнопку «Перейти в магазин».
 func Handle(bot *tgbotapi.BotAPI, chatID int64) {
 	shopURL := strings.TrimSpace(os.Getenv("SHOP_URL"))
@@ -22,7 +24,7 @@ func Handle(bot *tgbotapi.BotAPI, chatID int64) {
 		shopURL = defaultShopURL
 	}
 
-	photo := tgbotapi.NewPhoto(chatID, tgbotapi.FileURL(shopPlaceholderURL))
+	photo := tgbotapi.NewPhoto(chatID, tgbotapi.FilePath(shopImagePath))
 	photo.Caption = shopCaption
 	photo.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(

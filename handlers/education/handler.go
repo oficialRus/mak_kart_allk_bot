@@ -9,14 +9,16 @@ import (
 )
 
 const (
-	educationPlaceholderURL = "https://placehold.co/600x400/2d3a4e/eee/png?text=Обучение"
-	educationDescription    = "Раздел «Обучение» — здесь вы найдёте обучающие материалы, уроки и практики от психолога. Они помогут лучше понимать себя, развивать навыки и применять знания в жизни. Выберите тему ниже или вернитесь в меню."
+	// Локальный путь к красивой картинке раздела «Обучение».
+	// Поместите файл с изображением сюда (например, education.png).
+	educationImagePath   = "cmd/bot/images/education.png"
+	educationDescription = "Здесь вы найдёте обучающие материалы, уроки и практики от психолога.\nОни помогут лучше понимать себя, развивать навыки и применить знания в жизни.\nВыберите тему ниже или вернитесь в меню."
 )
 
-// Handle обрабатывает нажатие на кнопку «Обучение»: отправляет фото-заглушку,
-// описание раздела и кнопку «Назад».
+// Handle обрабатывает нажатие на кнопку «Обучение»: отправляет картинку раздела,
+// текст-описание и две кнопки внизу.
 func Handle(bot *tgbotapi.BotAPI, chatID int64) {
-	photo := tgbotapi.NewPhoto(chatID, tgbotapi.FileURL(educationPlaceholderURL))
+	photo := tgbotapi.NewPhoto(chatID, tgbotapi.FilePath(educationImagePath))
 	photo.Caption = educationDescription
 	photo.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData("📝 Пройти опрос", "education_survey")),

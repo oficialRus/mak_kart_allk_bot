@@ -18,6 +18,85 @@ const NUMBER_RADIUS = 26; // числа чуть ближе к центру
 const SEGMENT_BORDER_STROKE = 0.35;
 const toRad = (deg: number) => (deg * Math.PI) / 180;
 
+function sanitizeFullNameInput(value: string): string {
+  // Разрешаем только буквы (кириллица/латиница), пробелы и дефисы. Цифры и прочие символы вырезаем.
+  return value.replace(/[^A-Za-zА-Яа-яЁё\s-]+/g, "");
+}
+
+function sanitizeBirthDateInput(value: string): string {
+  // Разрешаем только цифры и точки.
+  return value.replace(/[^\d.]+/g, "");
+}
+
+function validateFullName(raw: string): { normalized?: string; error?: string } {
+  const trimmed = raw.trim().replace(/\s+/g, " ");
+  if (!trimmed) {
+    return { error: "Введите ФИО" };
+  }
+
+  const parts = trimmed.split(" ").filter(Boolean);
+  if (parts.length < 2) {
+    return { error: "Укажите как минимум фамилию и имя полностью." };
+  }
+
+  const namePartRe = /^[A-Za-zА-ЯЁа-яё]+(?:-[A-Za-zА-ЯЁа-яё]+)?$/;
+  if (!parts.every((p) => namePartRe.test(p))) {
+    return {
+      error: "ФИО может содержать только буквы (кириллица или латиница), без цифр и спецсимволов. Каждая часть отдельно.",
+    };
+  }
+
+  const normalized = parts
+    .map((part) => {
+      const lower = part.toLowerCase();
+      if (!lower) return "";
+      return lower.charAt(0).toUpperCase() + lower.slice(1);
+    })
+    .join(" ");
+
+  return { normalized };
+}
+
+function validateBirthDate(raw: string): { normalized?: string; error?: string } {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return { error: "Введите дату рождения" };
+  }
+
+  // Формат ДД.ММ.ГГГГ, только цифры и точки.
+  const match = /^(\d{1,2})\.(\d{1,2})\.(\d{4})$/.exec(trimmed);
+  if (!match) {
+    return { error: "Введите дату в формате ДД.ММ.ГГГГ, только цифры и точки." };
+  }
+
+  const day = parseInt(match[1], 10);
+  const month = parseInt(match[2], 10);
+  const year = parseInt(match[3], 10);
+
+  if (month < 1 || month > 12 || day < 1 || day > 31) {
+    return { error: "Некорректная дата рождения. Проверьте день и месяц." };
+  }
+
+  const date = new Date(year, month - 1, day);
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
+    return { error: "Такой даты не существует. Проверьте правильность." };
+  }
+
+  const now = new Date();
+  if (date > now) {
+    return { error: "Дата рождения не может быть в будущем." };
+  }
+  if (year < 1900) {
+    return { error: "Похоже на некорректный год рождения. Уточните, пожалуйста." };
+  }
+
+  const dd = String(day).padStart(2, "0");
+  const mm = String(month).padStart(2, "0");
+  const normalized = `${dd}.${mm}.${year}`;
+
+  return { normalized };
+}
+
 type Profile = {
   fullName: string;
   birthDate: string;
@@ -173,7 +252,14 @@ export default function App() {
   }, [profile]);
 
   const handleProfileChange = (field: keyof Profile, value: string) => {
-    setProfileForm((prev) => ({ ...prev, [field]: value }));
+    let nextValue = value;
+    if (field === "fullName") {
+      nextValue = sanitizeFullNameInput(value);
+    }
+    if (field === "birthDate") {
+      nextValue = sanitizeBirthDateInput(value);
+    }
+    setProfileForm((prev) => ({ ...prev, [field]: nextValue }));
     setProfileErrors((prev) => ({ ...prev, [field]: undefined }));
   };
 
@@ -182,8 +268,16 @@ export default function App() {
     if (isProfileSubmitting) return;
 
     const errors: Partial<Record<keyof Profile, string>> = {};
-    if (!profileForm.fullName.trim()) errors.fullName = "Введите ФИО";
-    if (!profileForm.birthDate.trim()) errors.birthDate = "Введите дату рождения";
+
+    const fullNameCheck = validateFullName(profileForm.fullName);
+    const birthDateCheck = validateBirthDate(profileForm.birthDate);
+
+    if (fullNameCheck.error) {
+      errors.fullName = fullNameCheck.error;
+    }
+    if (birthDateCheck.error) {
+      errors.birthDate = birthDateCheck.error;
+    }
 
     if (Object.keys(errors).length > 0) {
       setProfileErrors(errors);
@@ -192,8 +286,8 @@ export default function App() {
 
     setIsProfileSubmitting(true);
     const cleanProfile: Profile = {
-      fullName: profileForm.fullName.trim(),
-      birthDate: profileForm.birthDate.trim(),
+      fullName: (fullNameCheck.normalized ?? profileForm.fullName.trim()).replace(/\s+/g, " "),
+      birthDate: birthDateCheck.normalized ?? profileForm.birthDate.trim(),
     };
     try {
       window.localStorage.setItem(STORAGE_KEY_PROFILE, JSON.stringify(cleanProfile));

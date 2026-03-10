@@ -10,14 +10,104 @@ import (
 	"mime/multipart"
 	"net/http"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
+	"unicode"
 
 	"mak_kart_allk_bot/internal/repository"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
+
+var (
+	fullNamePartRe = regexp.MustCompile(`^[A-Za-zА-ЯЁа-яё]+(?:-[A-Za-zА-ЯЁа-яё]+)?$`)
+	birthDateRe    = regexp.MustCompile(`^(\d{1,2})\.(\d{1,2})\.(\d{4})$`)
+)
+
+// capitalizeNamePart делает первую букву заглавной, остальные строчными.
+// Поддерживает части с дефисом: каждая подчасть капитализируется отдельно.
+func capitalizeNamePart(s string) string {
+	subParts := strings.Split(s, "-")
+	for i, sp := range subParts {
+		runes := []rune(strings.ToLower(sp))
+		if len(runes) > 0 {
+			runes[0] = unicode.ToUpper(runes[0])
+		}
+		subParts[i] = string(runes)
+	}
+	return strings.Join(subParts, "-")
+}
+
+// validateFullName проверяет и нормализует ФИО.
+// Возвращает (нормализованное ФИО, "") при успехе или ("", сообщение об ошибке) при ошибке.
+func validateFullName(raw string) (string, string) {
+	trimmed := strings.TrimSpace(raw)
+	// Схлопываем множественные пробелы
+	spaceRe := regexp.MustCompile(`\s+`)
+	trimmed = spaceRe.ReplaceAllString(trimmed, " ")
+
+	if trimmed == "" {
+		return "", "Пожалуйста, напишите вашу фамилию и имя текстом."
+	}
+
+	parts := strings.Fields(trimmed)
+	if len(parts) < 2 {
+		return "", "Укажите как минимум фамилию и имя. Например: Иванова Анна"
+	}
+
+	for _, p := range parts {
+		if !fullNamePartRe.MatchString(p) {
+			return "", "ФИО может содержать только буквы (кириллица или латиница), без цифр и спецсимволов. Каждая часть отдельно."
+		}
+	}
+
+	normalized := make([]string, 0, len(parts))
+	for _, p := range parts {
+		normalized = append(normalized, capitalizeNamePart(p))
+	}
+	return strings.Join(normalized, " "), ""
+}
+
+// validateBirthDate проверяет и нормализует дату рождения.
+// Возвращает (нормализованная дата "ДД.ММ.ГГГГ", "") при успехе или ("", сообщение об ошибке).
+func validateBirthDate(raw string) (string, string) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return "", "Пожалуйста, напишите дату рождения. Например: 15.05.1990"
+	}
+
+	match := birthDateRe.FindStringSubmatch(trimmed)
+	if match == nil {
+		return "", "Введите дату в формате ДД.ММ.ГГГГ (например, 15.05.1990). Используйте только цифры и точки."
+	}
+
+	day, _ := strconv.Atoi(match[1])
+	month, _ := strconv.Atoi(match[2])
+	year, _ := strconv.Atoi(match[3])
+
+	if month < 1 || month > 12 || day < 1 || day > 31 {
+		return "", "Некорректная дата рождения. Проверьте день и месяц."
+	}
+
+	// Проверяем, что дата реально существует (например, 30.02 — нет)
+	parsed := time.Date(year, time.Month(month), day, 0, 0, 0, 0, time.UTC)
+	if parsed.Year() != year || int(parsed.Month()) != month || parsed.Day() != day {
+		return "", "Такой даты не существует. Проверьте правильность."
+	}
+
+	if parsed.After(time.Now()) {
+		return "", "Дата рождения не может быть в будущем."
+	}
+	if year < 1900 {
+		return "", "Похоже на некорректный год рождения. Уточните, пожалуйста."
+	}
+
+	normalized := fmt.Sprintf("%02d.%02d.%d", day, month, year)
+	return normalized, ""
+}
 
 const (
 	cabinetPlaceholderURL = "https://placehold.co/600x400/2c5282/eee/png?text=Личный+кабинет"
@@ -98,7 +188,7 @@ func Handle(bot *tgbotapi.BotAPI, chatID int64) {
 	StartRegistration(bot, chatID)
 }
 
-// StartRegistration запускает полную пошаговую регистрацию: шаг 1 — номер телефона.
+// StartRegistration запускает полную пошаговую регистрацию: шаг 1 — ФИО.
 func StartRegistration(bot *tgbotapi.BotAPI, chatID int64) {
 	regMu.Lock()
 	regStateByChat[chatID] = &regState{
@@ -107,14 +197,7 @@ func StartRegistration(bot *tgbotapi.BotAPI, chatID int64) {
 	}
 	regMu.Unlock()
 
-	msg := tgbotapi.NewMessage(chatID, "Шаг 1 из 3. Отправьте номер телефона (нажмите кнопку ниже или напишите в чат):")
-	keyboard := tgbotapi.NewReplyKeyboard(
-		tgbotapi.NewKeyboardButtonRow(
-			tgbotapi.NewKeyboardButtonContact("📲 Отправить номер телефона"),
-		),
-	)
-	keyboard.OneTimeKeyboard = true
-	msg.ReplyMarkup = keyboard
+	msg := tgbotapi.NewMessage(chatID, "Шаг 1 из 3. Напишите вашу фамилию и имя (можно с отчеством).\nПример: Иванова Анна или Иванова Анна Петровна")
 	if _, err := bot.Send(msg); err != nil {
 		log.Printf("ERROR sending registration step 1: %v", err)
 	}
@@ -145,6 +228,14 @@ func StartPhoneOnlyRegistration(bot *tgbotapi.BotAPI, chatID int64) {
 
 // HandleRegistrationMessage обрабатывает ответ пользователя в процессе регистрации.
 // Возвращает true, если сообщение обработано (чат в процессе регистрации).
+//
+// Полная регистрация (regModeFull):
+//   Шаг 1 — ФИО (с валидацией)
+//   Шаг 2 — Дата рождения (с валидацией)
+//   Шаг 3 — Номер телефона (кнопка контакта)
+//
+// Только телефон (regModePhoneOnly):
+//   Шаг 1 — Номер телефона (кнопка контакта)
 func HandleRegistrationMessage(bot *tgbotapi.BotAPI, chatID int64, message *tgbotapi.Message) bool {
 	regMu.Lock()
 	state, ok := regStateByChat[chatID]
@@ -153,8 +244,8 @@ func HandleRegistrationMessage(bot *tgbotapi.BotAPI, chatID int64, message *tgbo
 		return false
 	}
 
-	switch state.Step {
-	case 1:
+	// ── Сценарий «только телефон» (пришёл из мини-приложения, ФИО и дата уже есть) ──
+	if state.Mode == regModePhoneOnly {
 		var phone string
 		if message.Contact != nil {
 			phone = message.Contact.PhoneNumber
@@ -167,70 +258,94 @@ func HandleRegistrationMessage(bot *tgbotapi.BotAPI, chatID int64, message *tgbo
 		}
 		state.Phone = phone
 
-		// Если это короткий сценарий «только телефон», сохраняем только номер и завершаем.
-		if state.Mode == regModePhoneOnly {
-			regMu.Lock()
-			delete(regStateByChat, chatID)
-			regMu.Unlock()
+		regMu.Lock()
+		delete(regStateByChat, chatID)
+		regMu.Unlock()
 
-			profile, err := repository.GetProfile(context.Background(), chatID)
-			if err != nil {
-				log.Printf("ERROR phone-only registration: get profile failed for chat %d: %v", chatID, err)
-				_, _ = bot.Send(tgbotapi.NewMessage(chatID, "Произошла ошибка при загрузке профиля. Попробуйте ещё раз."))
-				return true
-			}
-			if profile == nil {
-				log.Printf("ERROR phone-only registration: profile not found for chat %d", chatID)
-				_, _ = bot.Send(tgbotapi.NewMessage(chatID, "Профиль не найден, пожалуйста, пройдите полную регистрацию."))
-				StartRegistration(bot, chatID)
-				return true
-			}
-
-			if err := repository.SaveProfile(context.Background(), chatID, profile.FullName, profile.BirthDate, state.Phone); err != nil {
-				log.Printf("ERROR phone-only registration: save profile failed for chat %d: %v", chatID, err)
-				_, _ = bot.Send(tgbotapi.NewMessage(chatID, "Произошла ошибка при сохранении телефона. Попробуйте ещё раз."))
-				return true
-			}
-			log.Printf("Phone-only profile update for chat %d: Phone=%s", chatID, state.Phone)
-
-			// Убираем клавиатуру контакта и показываем меню кабинета.
-			removeMsg := tgbotapi.NewMessage(chatID, "Спасибо! Ваш номер телефона обновлён.\nВы можете перейти в личный кабинет.")
-			removeMsg.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
-			if _, err := bot.Send(removeMsg); err != nil {
-				log.Printf("ERROR sending phone-only confirmation: %v", err)
-			}
-
-			SendCabinetMenu(bot, chatID, "Ваш номер телефона сохранён. Добро пожаловать в личный кабинет.")
+		profile, err := repository.GetProfile(context.Background(), chatID)
+		if err != nil {
+			log.Printf("ERROR phone-only registration: get profile failed for chat %d: %v", chatID, err)
+			_, _ = bot.Send(tgbotapi.NewMessage(chatID, "Произошла ошибка при загрузке профиля. Попробуйте ещё раз."))
+			return true
+		}
+		if profile == nil {
+			log.Printf("ERROR phone-only registration: profile not found for chat %d", chatID)
+			_, _ = bot.Send(tgbotapi.NewMessage(chatID, "Профиль не найден, пожалуйста, пройдите полную регистрацию."))
+			StartRegistration(bot, chatID)
 			return true
 		}
 
-		// Полный сценарий: переходим к шагу 2 (ФИО).
-		state.Step = 2
-		removeMsg := tgbotapi.NewMessage(chatID, "Шаг 2 из 3. Напишите ваше ФИО (фамилия, имя, отчество):")
+		if err := repository.SaveProfile(context.Background(), chatID, profile.FullName, profile.BirthDate, state.Phone); err != nil {
+			log.Printf("ERROR phone-only registration: save profile failed for chat %d: %v", chatID, err)
+			_, _ = bot.Send(tgbotapi.NewMessage(chatID, "Произошла ошибка при сохранении телефона. Попробуйте ещё раз."))
+			return true
+		}
+		log.Printf("Phone-only profile update for chat %d: Phone=%s", chatID, state.Phone)
+
+		removeMsg := tgbotapi.NewMessage(chatID, "Спасибо! Ваш номер телефона обновлён.\nВы можете перейти в личный кабинет.")
 		removeMsg.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
 		if _, err := bot.Send(removeMsg); err != nil {
-			log.Printf("ERROR sending registration step 2 prompt: %v", err)
+			log.Printf("ERROR sending phone-only confirmation: %v", err)
 		}
+
+		SendCabinetMenu(bot, chatID, "Ваш номер телефона сохранён. Добро пожаловать в личный кабинет.")
+		return true
+	}
+
+	// ── Полная регистрация (regModeFull) ──
+	switch state.Step {
+	case 1:
+		// Шаг 1: ФИО с валидацией
+		raw := strings.TrimSpace(message.Text)
+		normalized, errMsg := validateFullName(raw)
+		if errMsg != "" {
+			_, _ = bot.Send(tgbotapi.NewMessage(chatID, errMsg))
+			return true
+		}
+		state.FIO = normalized
+		state.Step = 2
+		_, _ = bot.Send(tgbotapi.NewMessage(chatID, "Шаг 2 из 3. Напишите вашу дату рождения (например, 15.05.1990):"))
 		return true
 
 	case 2:
-		fio := strings.TrimSpace(message.Text)
-		if fio == "" {
-			_, _ = bot.Send(tgbotapi.NewMessage(chatID, "Пожалуйста, напишите ваше ФИО текстом."))
+		// Шаг 2: Дата рождения с валидацией
+		raw := strings.TrimSpace(message.Text)
+		normalized, errMsg := validateBirthDate(raw)
+		if errMsg != "" {
+			_, _ = bot.Send(tgbotapi.NewMessage(chatID, errMsg))
 			return true
 		}
-		state.FIO = fio
+		state.BirthDate = normalized
 		state.Step = 3
-		_, _ = bot.Send(tgbotapi.NewMessage(chatID, "Шаг 3 из 3. Напишите вашу дату рождения (например, 15.05.1990):"))
+
+		// Показываем кнопку «Отправить номер телефона»
+		phoneMsg := tgbotapi.NewMessage(chatID, "Шаг 3 из 3. Отправьте номер телефона (нажмите кнопку ниже или напишите в чат):")
+		keyboard := tgbotapi.NewReplyKeyboard(
+			tgbotapi.NewKeyboardButtonRow(
+				tgbotapi.NewKeyboardButtonContact("📲 Отправить номер телефона"),
+			),
+		)
+		keyboard.OneTimeKeyboard = true
+		phoneMsg.ReplyMarkup = keyboard
+		if _, err := bot.Send(phoneMsg); err != nil {
+			log.Printf("ERROR sending registration step 3 prompt: %v", err)
+		}
 		return true
 
 	case 3:
-		birthDate := strings.TrimSpace(message.Text)
-		if birthDate == "" {
-			_, _ = bot.Send(tgbotapi.NewMessage(chatID, "Пожалуйста, напишите дату рождения (например, 15.05.1990)."))
+		// Шаг 3: Номер телефона
+		var phone string
+		if message.Contact != nil {
+			phone = message.Contact.PhoneNumber
+		} else if message.Text != "" {
+			phone = strings.TrimSpace(message.Text)
+		}
+		if phone == "" {
+			_, _ = bot.Send(tgbotapi.NewMessage(chatID, "Пожалуйста, отправьте номер телефона или нажмите кнопку «Отправить номер телефона»."))
 			return true
 		}
-		state.BirthDate = birthDate
+		state.Phone = phone
+
 		regMu.Lock()
 		delete(regStateByChat, chatID)
 		regMu.Unlock()
@@ -242,7 +357,14 @@ func HandleRegistrationMessage(bot *tgbotapi.BotAPI, chatID int64, message *tgbo
 		}
 		log.Printf("Profile saved for chat %d: FIO=%s, BirthDate=%s, Phone=%s", chatID, state.FIO, state.BirthDate, state.Phone)
 
-		SendCabinetMenu(bot, chatID, "Регистрация завершена. Спасибо! Добро пожаловать в личный кабинет.\n\nВаши данные приняты:\n• Телефон: "+state.Phone+"\n• ФИО: "+state.FIO+"\n• Дата рождения: "+state.BirthDate)
+		// Убираем клавиатуру контакта, затем показываем меню кабинета
+		removeMsg := tgbotapi.NewMessage(chatID, "Отлично! Данные получены.")
+		removeMsg.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
+		if _, err := bot.Send(removeMsg); err != nil {
+			log.Printf("ERROR removing keyboard after registration: %v", err)
+		}
+
+		SendCabinetMenu(bot, chatID, "Регистрация завершена. Добро пожаловать в личный кабинет!\n\nВаши данные:\n• ФИО: "+state.FIO+"\n• Дата рождения: "+state.BirthDate+"\n• Телефон: "+state.Phone)
 		return true
 	}
 
@@ -270,7 +392,7 @@ func SendCabinetMenu(bot *tgbotapi.BotAPI, chatID int64, text string) {
 		msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
 			tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData("✏️ Редактировать профиль", "cabinet_profile")),
 			tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData("📂 Мои разборы", "cabinet_my_reviews")),
-			tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData("🧮 Матрица по дате рождения", "cabinet_matrix")),
+			tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData("🧠 Цифровой психолог", "cabinet_digital_psychologist")),
 			tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData("🔢 Цифра дня", "cabinet_number_day")),
 			tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData("📚 Обучение", "cabinet_education")),
 			tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData("🏠 Перейти на главную", "ai_coach_main_menu")),
@@ -293,7 +415,7 @@ func SendCabinetMenu(bot *tgbotapi.BotAPI, chatID int64, text string) {
 				{"text": "📂 Мои разборы", "callback_data": "cabinet_my_reviews"},
 			},
 			{
-				{"text": "🧮 Матрица по дате рождения", "callback_data": "cabinet_matrix"},
+				{"text": "🧠 Цифровой психолог", "callback_data": "cabinet_digital_psychologist"},
 			},
 			{
 				// Здесь сразу Mini App «Цифра дня».

@@ -116,6 +116,25 @@ func main() {
 		if update.Message == nil {
 			continue
 		}
+
+		// Если в разделе «Расшифровка карты» мы ждём фото, разрешаем только одно фото.
+		if card_decode.IsWaitingPhoto(update.Message.Chat.ID) {
+			if len(update.Message.Photo) == 0 {
+				msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Сейчас я жду только фотографию карты. Пожалуйста, отправьте её как обычное фото без текста, видео или документов.")
+				msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
+					tgbotapi.NewInlineKeyboardRow(
+						tgbotapi.NewInlineKeyboardButtonData("Отменить", "card_decode_cancel"),
+					),
+				)
+				if _, err := bot.Send(msg); err != nil {
+					log.Printf("ERROR sending non-photo warning: %v", err)
+				}
+			} else {
+				card_decode.HandlePhoto(bot, update.Message.Chat.ID, token, update.Message.Photo)
+				card_decode.StopWaitingPhoto(update.Message.Chat.ID)
+			}
+			continue
+		}
 		// /start как команда или просто текст "/start" (например из deep link)
 		isStart := (update.Message.IsCommand() && update.Message.Command() == "start") ||
 			update.Message.Text == "/start" || (len(update.Message.Text) >= 6 && update.Message.Text[:6] == "/start")
@@ -171,6 +190,7 @@ func handleStart(bot *tgbotapi.BotAPI, chatID int64) {
 
 const (
 	feedbackURL = "https://t.me/RyslanNovikov"
+	siteURL     = "https://www.garmonia-mak.ru/"
 	giftText    = "🎁 Ваш подарок от психолога — короткий тест, который поможет лучше понять себя. Нажмите «Цифра дня» или перейдите далее."
 
 	giftWhyText      = "Этот тест помогает определить ваш текущий уровень и подобрать подходящие материалы. Займёт пару минут и даст персональную рекомендацию."
@@ -203,10 +223,10 @@ func handleCallback(bot *tgbotapi.BotAPI, q *tgbotapi.CallbackQuery, miniappURL,
 				tgbotapi.NewInlineKeyboardButtonData("💬 Пожелания по работе бота и карт", "feedback_suggestions"),
 			),
 			tgbotapi.NewInlineKeyboardRow(
-				tgbotapi.NewInlineKeyboardButtonData("⬅️ Назад", "ai_coach_back"),
+				tgbotapi.NewInlineKeyboardButtonURL("🌐 Наш сайт", siteURL),
 			),
 			tgbotapi.NewInlineKeyboardRow(
-				tgbotapi.NewInlineKeyboardButtonData("🏠 Главное меню", "ai_coach_main_menu"),
+				tgbotapi.NewInlineKeyboardButtonData("⬅️ Назад", "ai_coach_back"),
 			),
 		)
 		if _, err := bot.Send(msg); err != nil {
@@ -226,10 +246,10 @@ func handleCallback(bot *tgbotapi.BotAPI, q *tgbotapi.CallbackQuery, miniappURL,
 				tgbotapi.NewInlineKeyboardButtonData("💬 Пожелания по работе бота и карт", "feedback_suggestions"),
 			),
 			tgbotapi.NewInlineKeyboardRow(
-				tgbotapi.NewInlineKeyboardButtonData("⬅️ Назад", "ai_coach_main_menu"),
+				tgbotapi.NewInlineKeyboardButtonURL("🌐 Наш сайт", siteURL),
 			),
 			tgbotapi.NewInlineKeyboardRow(
-				tgbotapi.NewInlineKeyboardButtonData("🏠 Главное меню", "ai_coach_main_menu"),
+				tgbotapi.NewInlineKeyboardButtonData("⬅️ Назад", "ai_coach_main_menu"),
 			),
 		)
 		if _, err := bot.Send(msg); err != nil {
@@ -291,6 +311,18 @@ func handleCallback(bot *tgbotapi.BotAPI, q *tgbotapi.CallbackQuery, miniappURL,
 		card_day.Handle(bot, chatID)
 	case "ai_coach_number_day":
 		number_day.Handle(bot, chatID)
+	case "card_decode_wait_photo":
+		card_decode.StartWaitingPhoto(chatID)
+		msg := tgbotapi.NewMessage(chatID, "Прикрепите фотографию карты прямо в этот диалог — как обычное фото. Сейчас можно отправить только одну карту.")
+		if _, err := bot.Send(msg); err != nil {
+			log.Printf("ERROR sending card_decode_wait_photo message: %v", err)
+		}
+	case "card_decode_cancel":
+		card_decode.StopWaitingPhoto(chatID)
+		msg := tgbotapi.NewMessage(chatID, "Ок, расшифровку карты отменяю. Если захотите попробовать ещё раз — нажмите «Расшифровка карты» или «Отправить фото».")
+		if _, err := bot.Send(msg); err != nil {
+			log.Printf("ERROR sending card_decode_cancel message: %v", err)
+		}
 	case "ai_coach_birth_spread":
 		// Запуск сценария расклада по дате рождения: официальный запрос номера телефона.
 		cabinet.StartRegistration(bot, chatID)
@@ -314,8 +346,8 @@ func handleCallback(bot *tgbotapi.BotAPI, q *tgbotapi.CallbackQuery, miniappURL,
 		cabinet.SendEditProfileMenu(bot, chatID)
 	case "cabinet_my_reviews":
 		cabinet.SendCabinetMenu(bot, chatID, "Раздел «Мои разборы» в разработке.")
-	case "cabinet_matrix":
-		cabinet.SendCabinetMenu(bot, chatID, "Раздел «Матрица по дате рождения» в разработке.")
+	case "cabinet_digital_psychologist":
+		cabinet.SendCabinetMenu(bot, chatID, "Раздел «Цифровой психолог» в разработке.\n\nЗдесь в будущем появятся персональные цифровые разборы и рекомендации по вашему профилю.")
 	case "cabinet_number_day":
 		// Из личного кабинета «Цифра дня» открывает то же мини‑приложение, что и в разделе «Подарок».
 		buttonURL := miniappURL
@@ -540,6 +572,7 @@ func sendAiCoachWelcome(_ *tgbotapi.BotAPI, chatID int64, token, miniappURL stri
 			{{"text": "🃏 Расшифровка карты", "callback_data": "ai_coach_card_decode"}},
 			{{"text": "🗓️ Карта дня", "callback_data": "ai_coach_card_day"}, {"text": "🔢 Цифра дня", "web_app": map[string]string{"url": buttonURL}}},
 			{{"text": "✨ Получить расклад по дате рождения", "callback_data": "ai_coach_birth_spread"}},
+			{{"text": "👤 Личный кабинет", "callback_data": "main_menu_cabinet"}},
 			{{"text": "🏠 Главное меню", "callback_data": "ai_coach_main_menu"}},
 		},
 	}
