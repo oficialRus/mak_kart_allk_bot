@@ -274,6 +274,8 @@ func handleCallback(bot *tgbotapi.BotAPI, q *tgbotapi.CallbackQuery, miniappURL,
 		cabinet.Handle(bot, chatID)
 	case "cabinet_register":
 		cabinet.StartRegistration(bot, chatID)
+	case "cabinet_my_data":
+		cabinet.SendProfileSummary(bot, chatID)
 	case "cabinet_profile":
 		cabinet.SendEditProfileMenu(bot, chatID)
 	case "cabinet_my_reviews":

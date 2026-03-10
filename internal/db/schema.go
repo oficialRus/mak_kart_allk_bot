@@ -13,13 +13,20 @@ func EnsureProfileTable(ctx context.Context) error {
 		telegram_id BIGINT PRIMARY KEY,
 		full_name   TEXT NOT NULL,
 		birth_date  TEXT NOT NULL,
+		phone       TEXT NOT NULL DEFAULT '',
 		created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 		updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 	);
 	`
-	_, err := Pool.ExecContext(ctx, q)
-	if err != nil {
+	if _, err := Pool.ExecContext(ctx, q); err != nil {
 		return fmt.Errorf("create table mini_app_profiles: %w", err)
 	}
+
+	// Добавляем колонку phone, если таблица уже существовала без неё.
+	alter := `ALTER TABLE mini_app_profiles ADD COLUMN IF NOT EXISTS phone TEXT NOT NULL DEFAULT '';`
+	if _, err := Pool.ExecContext(ctx, alter); err != nil {
+		return fmt.Errorf("alter table add phone: %w", err)
+	}
+
 	return nil
 }

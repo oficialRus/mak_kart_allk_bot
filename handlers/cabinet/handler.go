@@ -2,7 +2,9 @@ package cabinet
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"mime/multipart"
@@ -12,12 +14,22 @@ import (
 	"strings"
 	"sync"
 
+	"mak_kart_allk_bot/internal/repository"
+
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
 const (
 	cabinetPlaceholderURL = "https://placehold.co/600x400/2c5282/eee/png?text=Личный+кабинет"
-	cabinetCaption       = "Личный кабинет — для доступа к персональным материалам и настройкам пройдите регистрацию."
+	cabinetCaption        = "Личный кабинет — для доступа к персональным материалам и настройкам пройдите регистрацию."
+)
+
+// regMode описывает сценарий регистрации: полная или только телефон.
+type regMode string
+
+const (
+	regModeFull      regMode = "full"
+	regModePhoneOnly regMode = "phone_only"
 )
 
 type regState struct {
@@ -25,34 +37,74 @@ type regState struct {
 	Phone     string
 	FIO       string
 	BirthDate string
+	Mode      regMode
 }
 
 var (
-	regMu    sync.Mutex
+	regMu         sync.Mutex
 	regStateByChat = make(map[int64]*regState)
 )
 
-// Handle обрабатывает нажатие на кнопку «Личный кабинет»: фото-заглушка и кнопка «Пройти регистрацию».
+// Handle обрабатывает нажатие на кнопку «Личный кабинет».
+// Логика:
+// 1) Если профиля ещё нет — запускаем полную регистрацию (телефон, ФИО, дата рождения).
+// 2) Если есть профиль, но не заполнен телефон — просим только телефон.
+// 3) Если профиль полностью заполнен — показываем меню личного кабинета.
 func Handle(bot *tgbotapi.BotAPI, chatID int64) {
-	photo := tgbotapi.NewPhoto(chatID, tgbotapi.FileURL(cabinetPlaceholderURL))
-	photo.Caption = cabinetCaption
-	photo.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("📝 Пройти регистрацию", "cabinet_register"),
-		),
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("⬅️ Назад", "ai_coach_main_menu"),
-		),
-	)
-	if _, err := bot.Send(photo); err != nil {
-		log.Printf("ERROR sending cabinet message: %v", err)
+	ctx := context.Background()
+	profile, err := repository.GetProfile(ctx, chatID)
+	if err != nil {
+		log.Printf("ERROR cabinet Handle: get profile failed for chat %d: %v", chatID, err)
+		// Фоллбэк: старое поведение — заглушка и кнопка регистрации.
+		photo := tgbotapi.NewPhoto(chatID, tgbotapi.FileURL(cabinetPlaceholderURL))
+		photo.Caption = cabinetCaption
+		photo.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
+			tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonData("📝 Пройти регистрацию", "cabinet_register"),
+			),
+			tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonData("⬅️ Назад", "ai_coach_main_menu"),
+			),
+		)
+		if _, err := bot.Send(photo); err != nil {
+			log.Printf("ERROR sending cabinet message: %v", err)
+		}
+		return
 	}
+
+	// Если профиля нет — полная регистрация.
+	if profile == nil {
+		StartRegistration(bot, chatID)
+		return
+	}
+
+	missingFullName := strings.TrimSpace(profile.FullName) == ""
+	missingBirth := strings.TrimSpace(profile.BirthDate) == ""
+	missingPhone := strings.TrimSpace(profile.Phone) == ""
+
+	// Профиль полностью заполнен — сразу показываем меню.
+	if !missingFullName && !missingBirth && !missingPhone {
+		SendCabinetMenu(bot, chatID, "Ваш профиль уже заполнен. Добро пожаловать в личный кабинет.")
+		return
+	}
+
+	// Если не хватает только телефона — запускаем короткий сценарий: запрос телефона.
+	if missingPhone && !missingFullName && !missingBirth {
+		StartPhoneOnlyRegistration(bot, chatID)
+		return
+	}
+
+	// Во всех остальных случаях (нет ФИО или даты рождения) — полная регистрация.
+	StartRegistration(bot, chatID)
 }
 
-// StartRegistration запускает пошаговую регистрацию: шаг 1 — номер телефона.
+// StartRegistration запускает полную пошаговую регистрацию: шаг 1 — номер телефона.
 func StartRegistration(bot *tgbotapi.BotAPI, chatID int64) {
 	regMu.Lock()
-	regStateByChat[chatID] = &regState{Step: 1}
+	regStateByChat[chatID] = &regState{
+		Step: 1,
+		Mode: regModeFull,
+	}
 	regMu.Unlock()
 
 	msg := tgbotapi.NewMessage(chatID, "Шаг 1 из 3. Отправьте номер телефона (нажмите кнопку ниже или напишите в чат):")
@@ -65,6 +117,29 @@ func StartRegistration(bot *tgbotapi.BotAPI, chatID int64) {
 	msg.ReplyMarkup = keyboard
 	if _, err := bot.Send(msg); err != nil {
 		log.Printf("ERROR sending registration step 1: %v", err)
+	}
+}
+
+// StartPhoneOnlyRegistration запускает короткий сценарий — запрос только телефона.
+// Используется, если ФИО и дата рождения уже есть в профиле, но телефон ещё не заполнен.
+func StartPhoneOnlyRegistration(bot *tgbotapi.BotAPI, chatID int64) {
+	regMu.Lock()
+	regStateByChat[chatID] = &regState{
+		Step: 1,
+		Mode: regModePhoneOnly,
+	}
+	regMu.Unlock()
+
+	msg := tgbotapi.NewMessage(chatID, "В вашем профиле не указан номер телефона.\nПожалуйста, отправьте ваш официальный номер Telegram (нажмите кнопку ниже или напишите в чат):")
+	keyboard := tgbotapi.NewReplyKeyboard(
+		tgbotapi.NewKeyboardButtonRow(
+			tgbotapi.NewKeyboardButtonContact("📲 Отправить номер телефона"),
+		),
+	)
+	keyboard.OneTimeKeyboard = true
+	msg.ReplyMarkup = keyboard
+	if _, err := bot.Send(msg); err != nil {
+		log.Printf("ERROR sending phone-only registration step: %v", err)
 	}
 }
 
@@ -91,6 +166,45 @@ func HandleRegistrationMessage(bot *tgbotapi.BotAPI, chatID int64, message *tgbo
 			return true
 		}
 		state.Phone = phone
+
+		// Если это короткий сценарий «только телефон», сохраняем только номер и завершаем.
+		if state.Mode == regModePhoneOnly {
+			regMu.Lock()
+			delete(regStateByChat, chatID)
+			regMu.Unlock()
+
+			profile, err := repository.GetProfile(context.Background(), chatID)
+			if err != nil {
+				log.Printf("ERROR phone-only registration: get profile failed for chat %d: %v", chatID, err)
+				_, _ = bot.Send(tgbotapi.NewMessage(chatID, "Произошла ошибка при загрузке профиля. Попробуйте ещё раз."))
+				return true
+			}
+			if profile == nil {
+				log.Printf("ERROR phone-only registration: profile not found for chat %d", chatID)
+				_, _ = bot.Send(tgbotapi.NewMessage(chatID, "Профиль не найден, пожалуйста, пройдите полную регистрацию."))
+				StartRegistration(bot, chatID)
+				return true
+			}
+
+			if err := repository.SaveProfile(context.Background(), chatID, profile.FullName, profile.BirthDate, state.Phone); err != nil {
+				log.Printf("ERROR phone-only registration: save profile failed for chat %d: %v", chatID, err)
+				_, _ = bot.Send(tgbotapi.NewMessage(chatID, "Произошла ошибка при сохранении телефона. Попробуйте ещё раз."))
+				return true
+			}
+			log.Printf("Phone-only profile update for chat %d: Phone=%s", chatID, state.Phone)
+
+			// Убираем клавиатуру контакта и показываем меню кабинета.
+			removeMsg := tgbotapi.NewMessage(chatID, "Спасибо! Ваш номер телефона обновлён.\nВы можете перейти в личный кабинет.")
+			removeMsg.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
+			if _, err := bot.Send(removeMsg); err != nil {
+				log.Printf("ERROR sending phone-only confirmation: %v", err)
+			}
+
+			SendCabinetMenu(bot, chatID, "Ваш номер телефона сохранён. Добро пожаловать в личный кабинет.")
+			return true
+		}
+
+		// Полный сценарий: переходим к шагу 2 (ФИО).
 		state.Step = 2
 		removeMsg := tgbotapi.NewMessage(chatID, "Шаг 2 из 3. Напишите ваше ФИО (фамилия, имя, отчество):")
 		removeMsg.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
@@ -120,6 +234,14 @@ func HandleRegistrationMessage(bot *tgbotapi.BotAPI, chatID int64, message *tgbo
 		regMu.Lock()
 		delete(regStateByChat, chatID)
 		regMu.Unlock()
+
+		if err := repository.SaveProfile(context.Background(), chatID, state.FIO, state.BirthDate, state.Phone); err != nil {
+			log.Printf("ERROR saving profile for chat %d: %v", chatID, err)
+			_, _ = bot.Send(tgbotapi.NewMessage(chatID, "Произошла ошибка при сохранении данных. Попробуйте ещё раз."))
+			return true
+		}
+		log.Printf("Profile saved for chat %d: FIO=%s, BirthDate=%s, Phone=%s", chatID, state.FIO, state.BirthDate, state.Phone)
+
 		SendCabinetMenu(bot, chatID, "Регистрация завершена. Спасибо! Добро пожаловать в личный кабинет.\n\nВаши данные приняты:\n• Телефон: "+state.Phone+"\n• ФИО: "+state.FIO+"\n• Дата рождения: "+state.BirthDate)
 		return true
 	}
@@ -161,6 +283,9 @@ func SendCabinetMenu(bot *tgbotapi.BotAPI, chatID int64, text string) {
 
 	replyMarkup := map[string]interface{}{
 		"inline_keyboard": [][]map[string]interface{}{
+			{
+				{"text": "👤 Мои данные", "callback_data": "cabinet_my_data"},
+			},
 			{
 				{"text": "✏️ Редактировать профиль", "callback_data": "cabinet_profile"},
 			},
@@ -226,5 +351,53 @@ func SendEditProfileMenu(bot *tgbotapi.BotAPI, chatID int64) {
 	)
 	if _, err := bot.Send(msg); err != nil {
 		log.Printf("ERROR sending edit profile menu: %v", err)
+	}
+}
+
+// SendProfileSummary показывает пользователю его текущие данные профиля.
+func SendProfileSummary(bot *tgbotapi.BotAPI, chatID int64) {
+	ctx := context.Background()
+	p, err := repository.GetProfile(ctx, chatID)
+	if err != nil {
+		log.Printf("ERROR SendProfileSummary: get profile failed for chat %d: %v", chatID, err)
+		_, _ = bot.Send(tgbotapi.NewMessage(chatID, "Произошла ошибка при загрузке ваших данных. Попробуйте ещё раз позже."))
+		return
+	}
+
+	if p == nil {
+		_, _ = bot.Send(tgbotapi.NewMessage(chatID, "Ваш профиль ещё не заполнен. Пройдите короткую регистрацию, чтобы сохранить ваши данные."))
+		StartRegistration(bot, chatID)
+		return
+	}
+
+	fullName := strings.TrimSpace(p.FullName)
+	if fullName == "" {
+		fullName = "— не указано —"
+	}
+	birth := strings.TrimSpace(p.BirthDate)
+	if birth == "" {
+		birth = "— не указано —"
+	}
+	phone := strings.TrimSpace(p.Phone)
+	if phone == "" {
+		phone = "— не указан —"
+	}
+
+	text := fmt.Sprintf(
+		"👤 Ваши данные профиля:\n\n• ФИО: %s\n• Дата рождения: %s\n• Телефон: %s",
+		fullName, birth, phone,
+	)
+
+	msg := tgbotapi.NewMessage(chatID, text)
+	msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("✏️ Редактировать профиль", "cabinet_profile"),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("⬅️ В личный кабинет", "main_menu_cabinet"),
+		),
+	)
+	if _, err := bot.Send(msg); err != nil {
+		log.Printf("ERROR sending profile summary: %v", err)
 	}
 }

@@ -46,9 +46,10 @@ func ValidateInitData(botToken, initData string) (telegramUserID int64, err erro
 	}
 	dataCheckString := sb.String()
 
-	// secret_key = HMAC-SHA256(bot_token, "WebAppData")
-	mac := hmac.New(sha256.New, []byte(botToken))
-	mac.Write([]byte("WebAppData"))
+	// secret_key = HMAC-SHA256(key="WebAppData", data=bot_token)
+	// https://core.telegram.org/bots/webapps#validating-data-received-via-the-mini-app
+	mac := hmac.New(sha256.New, []byte("WebAppData"))
+	mac.Write([]byte(botToken))
 	secretKey := mac.Sum(nil)
 
 	// computed_hash = HMAC-SHA256(secret_key, data_check_string)
