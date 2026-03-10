@@ -24,9 +24,7 @@ func Handle(bot *tgbotapi.BotAPI, chatID int64) {
 		shopURL = defaultShopURL
 	}
 
-	photo := tgbotapi.NewPhoto(chatID, tgbotapi.FilePath(shopImagePath))
-	photo.Caption = shopCaption
-	photo.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
+	keyboard := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonURL("🛒 Перейти в магазин", shopURL),
 		),
@@ -34,7 +32,15 @@ func Handle(bot *tgbotapi.BotAPI, chatID int64) {
 			tgbotapi.NewInlineKeyboardButtonData("🏠 Главное меню", "ai_coach_main_menu"),
 		),
 	)
+	photo := tgbotapi.NewPhoto(chatID, tgbotapi.FilePath(shopImagePath))
+	photo.Caption = shopCaption
+	photo.ReplyMarkup = keyboard
 	if _, err := bot.Send(photo); err != nil {
-		log.Printf("ERROR sending shop message: %v", err)
+		log.Printf("ERROR sending shop image, fallback to text: %v", err)
+		msg := tgbotapi.NewMessage(chatID, shopCaption)
+		msg.ReplyMarkup = keyboard
+		if _, err2 := bot.Send(msg); err2 != nil {
+			log.Printf("ERROR sending shop fallback message: %v", err2)
+		}
 	}
 }

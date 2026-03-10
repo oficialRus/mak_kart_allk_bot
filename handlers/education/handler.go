@@ -18,14 +18,21 @@ const (
 // Handle обрабатывает нажатие на кнопку «Обучение»: отправляет картинку раздела,
 // текст-описание и две кнопки внизу.
 func Handle(bot *tgbotapi.BotAPI, chatID int64) {
-	photo := tgbotapi.NewPhoto(chatID, tgbotapi.FilePath(educationImagePath))
-	photo.Caption = educationDescription
-	photo.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
+	keyboard := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData("📝 Пройти опрос", "education_survey")),
 		tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData("⬅️ Назад", "ai_coach_main_menu")),
 	)
+
+	photo := tgbotapi.NewPhoto(chatID, tgbotapi.FilePath(educationImagePath))
+	photo.Caption = educationDescription
+	photo.ReplyMarkup = keyboard
 	if _, err := bot.Send(photo); err != nil {
-		log.Printf("ERROR sending education message: %v", err)
+		log.Printf("ERROR sending education image, fallback to text: %v", err)
+		msg := tgbotapi.NewMessage(chatID, educationDescription)
+		msg.ReplyMarkup = keyboard
+		if _, err2 := bot.Send(msg); err2 != nil {
+			log.Printf("ERROR sending education fallback message: %v", err2)
+		}
 	}
 }
 
