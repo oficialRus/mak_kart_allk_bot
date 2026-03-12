@@ -265,8 +265,9 @@ export default function App() {
       setDailyMessage(null);
     };
 
-    // Если нет initData или базовый URL API не задан — сразу используем локальный подсчёт.
-    if (!initData || !apiBase) {
+    // Если нет initData — используем локальный подсчёт.
+    // Пустой apiBase допустим: тогда запрос уходит на относительный `/api/...`.
+    if (!initData) {
       computeFallbackIndex();
       return;
     }
