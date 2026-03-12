@@ -56,7 +56,7 @@ body {
 .compass-promo {
   margin: 0;
   text-align: center;
-  font-size: clamp(0.95rem, 3.5vw, 1.15rem);
+  font-size: clamp(1.05rem, 4vw, 1.35rem);
   font-weight: 500;
   letter-spacing: 0.02em;
   color: rgba(232, 220, 192, 0.95);
@@ -163,13 +163,44 @@ body {
   width: var(--size);
   height: var(--size);
   border-radius: 999px;
-  background: radial-gradient(circle at 50% 50%, #151f35 0%, #0f1629 40%, #0B132B 100%);
+  position: relative;
+  background: radial-gradient(circle at 50% 35%, #192542 0%, #0f172b 40%, #050815 100%);
   box-shadow:
-    0 20px 48px rgba(0, 0, 0, 0.45),
-    0 0 0 0.5px rgba(201, 169, 110, 0.2),
-    inset 0 1px 0 rgba(201, 169, 110, 0.04);
+    0 22px 52px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(201, 169, 110, 0.3),
+    inset 0 1px 0 rgba(248, 250, 252, 0.04),
+    inset 0 0 0 1px rgba(15, 23, 42, 0.7);
   display: grid;
   place-items: center;
+}
+
+.wheel-shell::before {
+  content: "";
+  position: absolute;
+  inset: -8px;
+  border-radius: inherit;
+  background:
+    radial-gradient(circle at 50% 20%, rgba(248, 250, 252, 0.15) 0%, transparent 40%),
+    radial-gradient(circle at 50% 90%, rgba(0, 0, 0, 0.7) 10%, transparent 55%);
+  box-shadow:
+    0 0 0 1px rgba(201, 169, 110, 0.6),
+    0 0 26px rgba(201, 169, 110, 0.45);
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+.wheel-outer {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  animation: wheel-hint 3.8s ease-in-out infinite;
+  will-change: transform;
+}
+
+.wheel-outer.is-spinning {
+  animation: none;
 }
 
 .wheel {
@@ -195,6 +226,7 @@ body {
   height: 44px;
   transform: translateX(-50%);
   z-index: 10;
+  animation: pointer-hint 2.6s ease-in-out infinite;
 }
 
 .pointer::before {
@@ -238,12 +270,16 @@ body {
   font-weight: 600;
   letter-spacing: 0.04em;
   color: #0B132B;
-  background: linear-gradient(160deg, #E8DCC0 0%, #d4c4a8 40%, #C9A96E 100%);
+  background: linear-gradient(120deg, #e8dcc0 0%, #c9a96e 40%, #f5e9cf 70%, #e0cfa9 100%);
   box-shadow:
     0 8px 24px rgba(0, 0, 0, 0.35),
     inset 0 1px 0 rgba(255, 255, 255, 0.25);
   cursor: pointer;
-  transition: transform 180ms ease, box-shadow 180ms ease, opacity 150ms ease;
+  position: relative;
+  overflow: hidden;
+  transition: transform 180ms ease, box-shadow 180ms ease, opacity 150ms ease, background-position 220ms ease;
+  background-size: 220% 220%;
+  animation: spin-button-gradient 3s ease-in-out infinite;
 }
 
 .spin-button:hover:not(:disabled) {
@@ -261,6 +297,27 @@ body {
 
 .spin-button.loading {
   animation: pulse 1s ease-in-out infinite;
+}
+
+.spin-button::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 15% 0%, rgba(255, 255, 255, 0.45) 0%, transparent 45%);
+  opacity: 0.0;
+  pointer-events: none;
+}
+
+@keyframes spin-button-gradient {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
 }
 
 .result-text {
@@ -396,6 +453,43 @@ body {
   box-shadow:
     0 10px 26px rgba(0, 0, 0, 0.4),
     inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+@keyframes pointer-hint {
+  0%,
+  100% {
+    top: -8px;
+  }
+  50% {
+    top: -4px;
+  }
+}
+
+@keyframes wheel-hint {
+  0%,
+  100% {
+    transform: rotate(-4deg);
+  }
+  50% {
+    transform: rotate(4deg);
+  }
+}
+
+.wheel-center-core {
+  transform-origin: 50% 50%;
+  animation: center-core-pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes center-core-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    filter: drop-shadow(0 0 4px rgba(201, 169, 110, 0.45));
+  }
+  50% {
+    transform: scale(1.12);
+    filter: drop-shadow(0 0 10px rgba(201, 169, 110, 0.85));
+  }
 }
 
 @keyframes pulse {

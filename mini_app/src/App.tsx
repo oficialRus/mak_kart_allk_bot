@@ -31,18 +31,16 @@ function sanitizeBirthDateInput(value: string): string {
 function validateFullName(raw: string): { normalized?: string; error?: string } {
   const trimmed = raw.trim().replace(/\s+/g, " ");
   if (!trimmed) {
-    return { error: "Введите ФИО" };
+    return { error: "Введите имя" };
   }
 
   const parts = trimmed.split(" ").filter(Boolean);
-  if (parts.length < 2) {
-    return { error: "Укажите как минимум фамилию и имя полностью." };
-  }
 
+  // Разрешаем только буквы (кириллица/латиница) и дефис в каждой части.
   const namePartRe = /^[A-Za-zА-ЯЁа-яё]+(?:-[A-Za-zА-ЯЁа-яё]+)?$/;
   if (!parts.every((p) => namePartRe.test(p))) {
     return {
-      error: "ФИО может содержать только буквы (кириллица или латиница), без цифр и спецсимволов. Каждая часть отдельно.",
+      error: "Имя может содержать только буквы (кириллица или латиница) и дефис, без цифр и спецсимволов.",
     };
   }
 
@@ -136,9 +134,9 @@ function getTodayKey() {
   return now.toISOString().slice(0, 10); // YYYY-MM-DD
 }
 
-// Внешнее тонкое золотое кольцо
+// Внешнее золотое кольцо компаса
 const OUTER_RING_R = 47.8;
-const OUTER_RING_STROKE = 0.55;
+const OUTER_RING_STROKE = 0.85;
 
 // Палитра: тёмно-синие градиенты, очень низкий контраст (плавные переходы)
 const SEGMENT_GRADIENTS = [
@@ -239,16 +237,66 @@ export default function App() {
     }
   }, []);
 
-  // При наличии профиля вычисляем "цифру дня" детерминированно на основе профиля и текущей даты.
+  // При наличии профиля запрашиваем "цифру дня" с бэкенда.
+  // Если запрос недоступен (например, при локальной разработке без Telegram WebApp),
+  // используем детерминированный локальный расчёт как запасной вариант.
   useEffect(() => {
     if (!profile) return;
+    const w = window as unknown as {
+      Telegram?: {
+        WebApp?: {
+          initData?: string;
+        };
+      };
+    };
+    const initData = w.Telegram?.WebApp?.initData ?? "";
+    const apiBase = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
+
     const todayKey = getTodayKey();
-    const key = `${profile.fullName}|${profile.birthDate}|${todayKey}`;
-    const idx = hashStringToIndex(key, SECTOR_COUNT);
-    setDailyIndex(idx);
-    // Сбрасываем отображение результата до первого осознанного нажатия "Крутить".
-    setWinningIndex(null);
-    setHasResult(false);
+
+    // Функция локального подсчёта "цифры дня" — как запасной вариант,
+    // если нет initData или API недоступен.
+    const computeFallbackIndex = () => {
+      const key = `${profile.fullName}|${profile.birthDate}|${todayKey}|${initData}`;
+      const idx = hashStringToIndex(key, SECTOR_COUNT);
+      setDailyIndex(idx);
+      setWinningIndex(null);
+      setHasResult(false);
+    };
+
+    // Если нет initData или базовый URL API не задан — сразу используем локальный подсчёт.
+    if (!initData || !apiBase) {
+      computeFallbackIndex();
+      return;
+    }
+
+    (async () => {
+      try {
+        const res = await fetch(`${apiBase}/api/daily-number`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ initData }),
+        });
+        if (!res.ok) {
+          // Если по какой-то причине API не отвечает — не ломаем приложение.
+          console.warn("daily-number API error:", res.status, await res.text());
+          computeFallbackIndex();
+          return;
+        }
+        const data = (await res.json()) as { index: number; num: number };
+        if (typeof data.index === "number" && data.index >= 0 && data.index < SECTOR_COUNT) {
+          setDailyIndex(data.index);
+          // Сбрасываем отображение результата до первого осознанного нажатия "Крутить".
+          setWinningIndex(null);
+          setHasResult(false);
+        } else {
+          computeFallbackIndex();
+        }
+      } catch (err) {
+        console.warn("daily-number API request failed:", err);
+        computeFallbackIndex();
+      }
+    })();
   }, [profile]);
 
   const handleProfileChange = (field: keyof Profile, value: string) => {
@@ -423,16 +471,17 @@ export default function App() {
           <div className="pointer" aria-hidden="true" />
 
           <div className="wheel-shell">
-            <div
-              className={`wheel ${isSpinning ? "is-spinning" : ""}`}
-              style={
-                {
-                  "--rotation": `${rotation}deg`,
-                } as React.CSSProperties
-              }
-              aria-label="Рулетка с девятью сегментами"
-            >
-              <svg className="wheel-svg" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" aria-label="Компас цифровой психологии — девять направлений">
+            <div className={`wheel-outer ${isSpinning ? "is-spinning" : ""}`}>
+              <div
+                className="wheel"
+                style={
+                  {
+                    "--rotation": `${rotation}deg`,
+                  } as React.CSSProperties
+                }
+                aria-label="Рулетка с девятью сегментами"
+              >
+                <svg className="wheel-svg" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" aria-label="Компас цифровой психологии — девять направлений">
                 <defs>
                   {/* Градиенты секторов (тёмно-синие, плавные) */}
                   {SEGMENT_GRADIENTS.map((g, i) => {
@@ -459,6 +508,22 @@ export default function App() {
                     <stop offset="60%" stopColor={ACCENT_GOLD} stopOpacity="0.12" />
                     <stop offset="100%" stopColor="#0B132B" stopOpacity="0" />
                   </radialGradient>
+                  {/* Переливающееся золотое свечение по внешнему кругу */}
+                  <linearGradient id="outerSweepGrad" x1="0" y1="0" x2="100" y2="0" gradientUnits="userSpaceOnUse">
+                    <stop offset="0%" stopColor={ACCENT_GOLD} stopOpacity="0" />
+                    <stop offset="35%" stopColor={ACCENT_GOLD} stopOpacity="0.05" />
+                    <stop offset="50%" stopColor={ACCENT_GOLD} stopOpacity="0.55" />
+                    <stop offset="65%" stopColor={ACCENT_GOLD} stopOpacity="0.05" />
+                    <stop offset="100%" stopColor={ACCENT_GOLD} stopOpacity="0" />
+                    <animateTransform
+                      attributeName="gradientTransform"
+                      type="rotate"
+                      from="0 50 50"
+                      to="360 50 50"
+                      dur="9s"
+                      repeatCount="indefinite"
+                    />
+                  </linearGradient>
                   <filter id="centerGlowFilter" x="-80%" y="-80%" width="260%" height="260%">
                     <feGaussianBlur in="SourceGraphic" stdDeviation="3.2" result="blur" />
                     <feMerge>
@@ -535,7 +600,7 @@ export default function App() {
                   );
                 })}
 
-                {/* Внешнее тонкое золотое кольцо */}
+                {/* Внешнее золотое кольцо */}
                 <circle
                   cx={CX}
                   cy={CY}
@@ -546,6 +611,44 @@ export default function App() {
                   strokeLinejoin="round"
                   opacity={0.5}
                 />
+                {/* Переливающееся по кругу золотое свечение */}
+                <circle
+                  cx={CX}
+                  cy={CY}
+                  r={OUTER_RING_R + 0.3}
+                  fill="none"
+                  stroke="url(#outerSweepGrad)"
+                  strokeWidth={OUTER_RING_STROKE * 1.15}
+                  strokeLinecap="round"
+                  opacity={0.9}
+                />
+                {/* "Молния" по внешнему кругу — короткий яркий сегмент, который бежит по окружности */}
+                <circle
+                  cx={CX}
+                  cy={CY}
+                  r={OUTER_RING_R + 1.1}
+                  fill="none"
+                  stroke={ACCENT_GOLD}
+                  strokeWidth={0.65}
+                  strokeLinecap="round"
+                  strokeDasharray="5 40"
+                  strokeOpacity={0.0}
+                >
+                  <animate
+                    attributeName="stroke-opacity"
+                    values="0;1;0"
+                    dur="1.8s"
+                    repeatCount="indefinite"
+                  />
+                  <animateTransform
+                    attributeName="transform"
+                    type="rotate"
+                    from="0 50 50"
+                    to="360 50 50"
+                    dur="3.6s"
+                    repeatCount="indefinite"
+                  />
+                </circle>
 
                 {/* Тонкое кольцо вокруг центра */}
                 <circle
@@ -556,6 +659,32 @@ export default function App() {
                   stroke="rgba(201, 169, 110, 0.28)"
                   strokeWidth={0.45}
                 />
+
+                {/* Компасные направления N / E / S / W по внешнему кругу */}
+                {[
+                  { label: "N", angle: -90 },
+                  { label: "E", angle: 0 },
+                  { label: "S", angle: 90 },
+                  { label: "W", angle: 180 },
+                ].map((dir) => {
+                  const pos = polar(CX, CY, OUTER_RING_R + 4, dir.angle);
+                  return (
+                    <text
+                      key={dir.label}
+                      x={pos.x}
+                      y={pos.y}
+                      textAnchor="middle"
+                      dominantBaseline="central"
+                      fill="rgba(232, 220, 192, 0.9)"
+                      fontSize="4.6"
+                      fontWeight="600"
+                      fontFamily="system-ui, -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif"
+                      letterSpacing="0.08em"
+                    >
+                      {dir.label}
+                    </text>
+                  );
+                })}
 
                 {/* Центр: мягкое свечение + тонкое кольцо вокруг ядра + лёгкие радиальные лучи */}
                 <g filter="url(#centerGlowFilter)">
@@ -576,9 +705,18 @@ export default function App() {
                   })}
                   <circle cx={CX} cy={CY} r="13" fill="url(#centerGlow)" />
                   <circle cx={CX} cy={CY} r={CENTER_CORE_RING_R} fill="none" stroke="rgba(232, 220, 192, 0.4)" strokeWidth="0.4" />
-                  <circle cx={CX} cy={CY} r="4.5" fill={ACCENT_GOLD} stroke="rgba(232, 220, 192, 0.85)" strokeWidth="0.45" />
+                  <circle
+                    className="wheel-center-core"
+                    cx={CX}
+                    cy={CY}
+                    r="4.5"
+                    fill={ACCENT_GOLD}
+                    stroke="rgba(232, 220, 192, 0.85)"
+                    strokeWidth="0.45"
+                  />
                 </g>
-              </svg>
+                </svg>
+              </div>
             </div>
           </div>
         </div>

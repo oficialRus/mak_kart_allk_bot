@@ -53,6 +53,11 @@ func main() {
 	}
 	log.Println("DB profile table OK")
 
+	if err := db.EnsureDailyNumberTable(context.Background()); err != nil {
+		log.Fatalf("db ensure daily numbers table: %v", err)
+	}
+	log.Println("DB daily numbers table OK")
+
 	token := strings.TrimSpace(os.Getenv("BOT_TOKEN"))
 	if token == "" {
 		log.Fatal("BOT_TOKEN is not set. Проверьте .env в корне проекта и переменную BOT_TOKEN.")
@@ -87,6 +92,7 @@ func main() {
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/profile", api.ProfileHandler(token))
+	mux.HandleFunc("/api/daily-number", api.DailyNumberHandler(token))
 	go func() {
 		log.Printf("API listening on :%s", apiPort)
 		if err := http.ListenAndServe(":"+apiPort, mux); err != nil {
