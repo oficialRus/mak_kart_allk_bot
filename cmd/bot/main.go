@@ -29,6 +29,10 @@ import (
 	"github.com/joho/godotenv"
 )
 
+// chatID -> флаг, что пользователь нажал «Пожелания по работе бота и карт»
+// и его последующие сообщения нужно пересылать в служебный канал.
+var feedbackSuggestionsSessions = make(map[int64]bool)
+
 func main() {
 	// Пробуем загрузить .env из текущей папки и из родительской (если запуск из cmd/bot)
 	for _, path := range []string{".env", "../.env"} {
@@ -117,10 +121,23 @@ func main() {
 			continue
 		}
 
+		chatID := update.Message.Chat.ID
+
+		// Если пользователь находится в режиме «Пожелания по работе бота и карт»,
+		// пересылаем все его сообщения в служебный канал, но при этом не ломаем
+		// основную логику обработки сообщений.
+		if feedbackSuggestionsSessions[chatID] {
+			const feedbackChannelID int64 = -1003751435716
+			fwd := tgbotapi.NewForward(feedbackChannelID, chatID, update.Message.MessageID)
+			if _, err := bot.Send(fwd); err != nil {
+				log.Printf("ERROR forwarding feedback suggestion message: %v", err)
+			}
+		}
+
 		// Если в разделе «Расшифровка карты» мы ждём фото, разрешаем только одно фото.
-		if card_decode.IsWaitingPhoto(update.Message.Chat.ID) {
+		if card_decode.IsWaitingPhoto(chatID) {
 			if len(update.Message.Photo) == 0 {
-				msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Сейчас я жду только фотографию карты. Пожалуйста, отправьте её как обычное фото без текста, видео или документов.")
+				msg := tgbotapi.NewMessage(chatID, "Сейчас я жду только фотографию карты. Пожалуйста, отправьте её как обычное фото без текста, видео или документов.")
 				msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
 					tgbotapi.NewInlineKeyboardRow(
 						tgbotapi.NewInlineKeyboardButtonData("Отменить", "card_decode_cancel"),
@@ -130,8 +147,8 @@ func main() {
 					log.Printf("ERROR sending non-photo warning: %v", err)
 				}
 			} else {
-				card_decode.HandlePhoto(bot, update.Message.Chat.ID, token, update.Message.Photo)
-				card_decode.StopWaitingPhoto(update.Message.Chat.ID)
+				card_decode.HandlePhoto(bot, chatID, token, update.Message.Photo)
+				card_decode.StopWaitingPhoto(chatID)
 			}
 			continue
 		}
@@ -147,22 +164,22 @@ func main() {
 			}
 
 			if payload == "birth_spread" {
-				log.Printf("Received /start birth_spread from chat %d", update.Message.Chat.ID)
+				log.Printf("Received /start birth_spread from chat %d", chatID)
 				// Запускаем сценарий с официальной кнопкой «поделиться номером телефона».
-				cabinet.StartRegistration(bot, update.Message.Chat.ID)
+				cabinet.StartRegistration(bot, chatID)
 			} else {
-				log.Printf("Received /start from chat %d payload=%q", update.Message.Chat.ID, payload)
-				handleStart(bot, update.Message.Chat.ID)
+				log.Printf("Received /start from chat %d payload=%q", chatID, payload)
+				handleStart(bot, chatID)
 			}
 			continue
 		}
 
 		// если есть активная сессия «Вопрос» — передаём сообщение ИИ-коучу
-		if question.HandleUserMessage(bot, update.Message.Chat.ID, update.Message.Text) {
+		if question.HandleUserMessage(bot, chatID, update.Message.Text) {
 			continue
 		}
 		// если пользователь в процессе регистрации — обрабатываем ответ
-		if cabinet.HandleRegistrationMessage(bot, update.Message.Chat.ID, update.Message) {
+		if cabinet.HandleRegistrationMessage(bot, chatID, update.Message) {
 			continue
 		}
 	}
@@ -191,7 +208,7 @@ func handleStart(bot *tgbotapi.BotAPI, chatID int64) {
 const (
 	feedbackURL = "https://t.me/RyslanNovikov"
 	siteURL     = "https://www.garmonia-mak.ru/"
-	giftText    = "🎁 Ваш подарок от психолога — короткий тест, который поможет лучше понять себя. Нажмите «Цифра дня» или перейдите далее."
+	giftText    = "🎁 Ваш подарок от психолога — маленькая практика для осознанности.\n\nНажмите «Цифра дня» и получите послание, которое может сделать ваш день более гармоничным."
 
 	giftWhyText      = "Этот тест помогает определить ваш текущий уровень и подобрать подходящие материалы. Займёт пару минут и даст персональную рекомендацию."
 	aiCoachIntroText = "ИИ Психолог-Коуч — это цифровой аналитик вашего мышления.\nОн помогает увидеть скрытые смыслы через ассоциации, метафоры и персональные числовые структуры.\n\nВы можете:\n— загрузить карту и разобрать её значение\n— описать свою ситуацию и получить направляющие вопросы\n— узнать свою цифру дня\n— получить персональный числовой разбор по дате рождения"
@@ -327,6 +344,8 @@ func handleCallback(bot *tgbotapi.BotAPI, q *tgbotapi.CallbackQuery, miniappURL,
 		// Запуск сценария расклада по дате рождения: официальный запрос номера телефона.
 		cabinet.StartRegistration(bot, chatID)
 	case "ai_coach_main_menu":
+		// Выход в главное меню — перестаём пересылать сообщения пользователя как пожелания.
+		delete(feedbackSuggestionsSessions, chatID)
 		mainmenu.Handle(bot, chatID, miniappURL, token)
 	case "ai_coach_back":
 		handleStart(bot, chatID)
@@ -416,6 +435,8 @@ func handleCallback(bot *tgbotapi.BotAPI, q *tgbotapi.CallbackQuery, miniappURL,
 		if _, err := bot.Send(msg); err != nil {
 			log.Printf("ERROR sending feedback suggestions message: %v", err)
 		}
+		// Включаем режим, при котором все последующие сообщения пользователя пересылаются в служебный канал.
+		feedbackSuggestionsSessions[chatID] = true
 	case "question_end":
 		question.EndSession(chatID)
 
