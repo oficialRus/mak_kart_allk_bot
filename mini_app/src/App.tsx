@@ -171,6 +171,7 @@ export default function App() {
   const [profileErrors, setProfileErrors] = useState<Partial<Record<keyof Profile, string>>>({});
   const [isProfileSubmitting, setIsProfileSubmitting] = useState(false);
   const [dailyIndex, setDailyIndex] = useState<number | null>(null);
+  const [dailyMessage, setDailyMessage] = useState<string | null>(null);
   const [showBirthSpreadModal, setShowBirthSpreadModal] = useState(false);
 
   useEffect(() => {
@@ -252,16 +253,16 @@ export default function App() {
     const initData = w.Telegram?.WebApp?.initData ?? "";
     const apiBase = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
 
-    const todayKey = getTodayKey();
-
     // Функция локального подсчёта "цифры дня" — как запасной вариант,
     // если нет initData или API недоступен.
     const computeFallbackIndex = () => {
+      const todayKey = getTodayKey();
       const key = `${profile.fullName}|${profile.birthDate}|${todayKey}|${initData}`;
       const idx = hashStringToIndex(key, SECTOR_COUNT);
       setDailyIndex(idx);
       setWinningIndex(null);
       setHasResult(false);
+      setDailyMessage(null);
     };
 
     // Если нет initData или базовый URL API не задан — сразу используем локальный подсчёт.
@@ -283,12 +284,13 @@ export default function App() {
           computeFallbackIndex();
           return;
         }
-        const data = (await res.json()) as { index: number; num: number };
+        const data = (await res.json()) as { index: number; num: number; message?: string };
         if (typeof data.index === "number" && data.index >= 0 && data.index < SECTOR_COUNT) {
           setDailyIndex(data.index);
           // Сбрасываем отображение результата до первого осознанного нажатия "Крутить".
           setWinningIndex(null);
           setHasResult(false);
+          setDailyMessage(typeof data.message === "string" && data.message.trim() ? data.message.trim() : null);
         } else {
           computeFallbackIndex();
         }
@@ -380,6 +382,7 @@ export default function App() {
     setDailyIndex(null);
     setWinningIndex(null);
     setHasResult(false);
+    setDailyMessage(null);
     setRotation(0);
   };
 
@@ -729,7 +732,9 @@ export default function App() {
           <div className="result-text">
             <p className="result-title">Ваша цифра дня: {resultNumber}</p>
             <p className="result-description">
-              Описание: сегодня число {resultNumber} подсказывает держать курс на приоритеты и не распыляться.
+              {dailyMessage
+                ? dailyMessage
+                : `Описание: сегодня число ${resultNumber} подсказывает держать курс на приоритеты и не распыляться.`}
             </p>
             <button type="button" className="secondary-button" onClick={() => setShowBirthSpreadModal(true)}>
               Сделать расклад по дате рождения

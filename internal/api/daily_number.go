@@ -1,13 +1,18 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"net/http"
+	"os"
+	"strings"
 	"time"
 
+	"mak_kart_allk_bot/internal/dailynumber"
 	"mak_kart_allk_bot/internal/repository"
 	"mak_kart_allk_bot/internal/webapp"
+	"mak_kart_allk_bot/openai"
 )
 
 // DailyNumberRequest — тело POST /api/daily-number от мини‑приложения.
@@ -16,10 +21,12 @@ type DailyNumberRequest struct {
 	InitData string `json:"initData"`
 }
 
-// DailyNumberResponse — ответ c "цифрой дня" (индекс от 0 до 8 для колеса и человекочитаемое число 1..9).
+// DailyNumberResponse — ответ c "цифрой дня"
+// (индекс от 0 до 8 для колеса, человекочитаемое число 1..9 и опциональное послание дня).
 type DailyNumberResponse struct {
-	Index int `json:"index"` // 0..8
-	Num   int `json:"num"`   // 1..9
+	Index   int    `json:"index"`             // 0..8
+	Num     int    `json:"num"`               // 1..9
+	Message string `json:"message,omitempty"` // мотивационное послание дня
 }
 
 // DailyNumberHandler обрабатывает POST /api/daily-number:
@@ -49,7 +56,8 @@ func DailyNumberHandler(botToken string) http.HandlerFunc {
 		}
 
 		now := time.Now()
-		num, err := repository.GetOrCreateDailyNumber(r.Context(), telegramID, now)
+		ctx := r.Context()
+		num, err := repository.GetOrCreateDailyNumber(ctx, telegramID, now)
 		if err != nil {
 			log.Printf("api daily-number: GetOrCreateDailyNumber failed for telegram_id=%d: %v", telegramID, err)
 			http.Error(w, "failed to get daily number", http.StatusInternalServerError)
@@ -61,8 +69,45 @@ func DailyNumberHandler(botToken string) http.HandlerFunc {
 			Num:   num,
 		}
 
+		// Пытаемся сгенерировать короткое послание дня через OpenAI.
+		// Если что-то пойдёт не так, просто вернём цифру без текста.
+		if p, ok := dailynumber.ParamsByNum[num]; ok {
+			apiKey := strings.TrimSpace(os.Getenv("OPENAI_API_KEY"))
+			if apiKey != "" {
+				msg, errText := generateDailyMessage(ctx, apiKey, num, p)
+				if errText != "" {
+					log.Printf("api daily-number: failed to generate message for num=%d: %s", num, errText)
+				} else if msg != "" {
+					resp.Message = msg
+				}
+			}
+		}
+
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(resp)
 	}
 }
+
+// generateDailyMessage собирает промпт и запрашивает OpenAI для послания дня.
+// Возвращает текст послания и строку-ошибку для логов (если что-то пошло не так).
+func generateDailyMessage(ctx context.Context, apiKey string, num int, p dailynumber.DigitParams) (string, string) {
+	userPrompt := dailynumber.BuildUserPrompt(num, p)
+
+	resp, userErr := openai.ChatCompletion(ctx, apiKey, openai.Request{
+		Model: openai.DefaultModel,
+		Messages: []openai.Message{
+			{Role: "system", Content: dailynumber.SystemPrompt},
+			{Role: "user", Content: userPrompt},
+		},
+	})
+	if userErr != nil {
+		return "", userErr.Text
+	}
+	if len(resp.Choices) == 0 {
+		return "", "no choices returned"
+	}
+	text := strings.TrimSpace(resp.Choices[0].Message.Content)
+	return text, ""
+}
+
 
