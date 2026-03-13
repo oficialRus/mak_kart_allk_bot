@@ -15,8 +15,11 @@ import (
 //   2. Если есть — возвращаем сохранённое значение.
 //   3. Если нет — детерминированно генерируем число 1..9 и сохраняем.
 func GetOrCreateDailyNumber(ctx context.Context, telegramID int64, day time.Time) (int, error) {
-	// Нормализуем дату до UTC-дня без времени.
-	forDate := day.UTC().Truncate(24 * time.Hour)
+	// Нормализуем дату к "дню по Москве" (UTC+3) и записываем в БД как UTC-день.
+	// Таким образом, новые значения появляются ровно в 00:00 по МСК, независимо от часового пояса сервера.
+	msk := time.FixedZone("MSK", 3*60*60)
+	local := day.In(msk)
+	forDate := time.Date(local.Year(), local.Month(), local.Day(), 0, 0, 0, 0, time.UTC)
 
 	const selectQuery = `
 SELECT number

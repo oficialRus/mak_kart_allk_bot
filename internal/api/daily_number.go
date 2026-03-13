@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"mak_kart_allk_bot/internal/dailynumber"
+	"mak_kart_allk_bot/internal/db"
 	"mak_kart_allk_bot/internal/repository"
 	"mak_kart_allk_bot/internal/webapp"
 	"mak_kart_allk_bot/openai"
@@ -64,21 +66,53 @@ func DailyNumberHandler(botToken string) http.HandlerFunc {
 			return
 		}
 
+		// Вычисляем тот же календарный день по Москве, который использует репозиторий.
+		msk := time.FixedZone("MSK", 3*60*60)
+		local := now.In(msk)
+		forDate := time.Date(local.Year(), local.Month(), local.Day(), 0, 0, 0, 0, time.UTC)
+
 		resp := DailyNumberResponse{
 			Index: (num - 1), // 0..8
 			Num:   num,
 		}
 
-		// Пытаемся сгенерировать короткое послание дня через OpenAI.
-		// Если что-то пойдёт не так, просто вернём цифру без текста.
-		if p, ok := dailynumber.ParamsByNum[num]; ok {
-			apiKey := strings.TrimSpace(os.Getenv("OPENAI_API_KEY"))
-			if apiKey != "" {
-				msg, errText := generateDailyMessage(ctx, apiKey, num, p)
-				if errText != "" {
-					log.Printf("api daily-number: failed to generate message for num=%d: %s", num, errText)
-				} else if msg != "" {
-					resp.Message = msg
+		// Сначала пробуем взять уже сгенерированное послание из БД,
+		// чтобы за один календарный день по МСК текст был стабильным.
+		var existing sql.NullString
+		err = db.Pool.QueryRowContext(
+			ctx,
+			`SELECT message FROM mini_app_daily_numbers WHERE telegram_id = $1 AND for_date = $2`,
+			telegramID,
+			forDate,
+		).Scan(&existing)
+		if err != nil && err != sql.ErrNoRows {
+			log.Printf("api daily-number: select existing message failed for telegram_id=%d: %v", telegramID, err)
+		}
+
+		if existing.Valid && strings.TrimSpace(existing.String) != "" {
+			resp.Message = existing.String
+		} else {
+			// Пытаемся сгенерировать короткое послание дня через OpenAI.
+			// Если что-то пойдёт не так, просто вернём цифру без текста.
+			if p, ok := dailynumber.ParamsByNum[num]; ok {
+				apiKey := strings.TrimSpace(os.Getenv("OPENAI_API_KEY"))
+				if apiKey != "" {
+					msg, errText := generateDailyMessage(ctx, apiKey, num, p)
+					if errText != "" {
+						log.Printf("api daily-number: failed to generate message for num=%d: %s", num, errText)
+					} else if msg != "" {
+						resp.Message = msg
+						// Кешируем сгенерированное послание в БД, чтобы в течение дня не звать ИИ повторно.
+						if _, err := db.Pool.ExecContext(
+							ctx,
+							`UPDATE mini_app_daily_numbers SET message = $3 WHERE telegram_id = $1 AND for_date = $2`,
+							telegramID,
+							forDate,
+							msg,
+						); err != nil {
+							log.Printf("api daily-number: failed to update message for telegram_id=%d: %v", telegramID, err)
+						}
+					}
 				}
 			}
 		}

@@ -13,12 +13,18 @@ func EnsureDailyNumberTable(ctx context.Context) error {
 		telegram_id BIGINT NOT NULL,
 		for_date    DATE   NOT NULL,
 		number      INT    NOT NULL,
+		message     TEXT,
 		created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 		PRIMARY KEY (telegram_id, for_date)
 	);
 	`
 	if _, err := Pool.ExecContext(ctx, q); err != nil {
 		return fmt.Errorf("create table mini_app_daily_numbers: %w", err)
+	}
+
+	// На случай старой схемы без колонки message — добавляем её, если её ещё нет.
+	if _, err := Pool.ExecContext(ctx, `ALTER TABLE mini_app_daily_numbers ADD COLUMN IF NOT EXISTS message TEXT;`); err != nil {
+		return fmt.Errorf("alter table mini_app_daily_numbers add message: %w", err)
 	}
 
 	return nil
