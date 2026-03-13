@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"mak_kart_allk_bot/openai"
 
@@ -111,6 +112,19 @@ func HandleDigital(bot *tgbotapi.BotAPI, chatID int64) {
 	if _, err := bot.Send(msg); err != nil {
 		log.Printf("ERROR sending digital psychologist message: %v", err)
 	}
+
+	// Через 1 секунду задаём конкретный уточняющий вопрос про разбор по дате рождения.
+	go func() {
+		time.Sleep(1 * time.Second)
+
+		followup := "Хотите, чтобы я сделал разбор по вашей дате рождения?\n\n" +
+			"Если да — просто напишите в чат: «Да» и укажите вашу дату рождения в формате ДД.ММ.ГГГГ."
+
+		followupMsg := tgbotapi.NewMessage(chatID, followup)
+		if _, err := bot.Send(followupMsg); err != nil {
+			log.Printf("ERROR sending digital psychologist follow-up: %v", err)
+		}
+	}()
 }
 
 // StartSilentSession инициализирует диалоговую сессию «Вопрос» без отправки
