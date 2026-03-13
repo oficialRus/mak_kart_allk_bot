@@ -390,7 +390,7 @@ func SendCabinetMenu(bot *tgbotapi.BotAPI, chatID int64, text string) {
 	if token == "" {
 		msg := tgbotapi.NewMessage(chatID, text)
 		msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
-			tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData("✏️ Редактировать профиль", "cabinet_profile")),
+			tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData("👤 Мои данные", "cabinet_my_data")),
 			tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData("📂 Мои разборы", "cabinet_my_reviews")),
 			tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData("🧠 Цифровой психолог", "cabinet_digital_psychologist")),
 			tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData("🔢 Цифра дня", "cabinet_number_day")),
@@ -407,9 +407,6 @@ func SendCabinetMenu(bot *tgbotapi.BotAPI, chatID int64, text string) {
 		"inline_keyboard": [][]map[string]interface{}{
 			{
 				{"text": "👤 Мои данные", "callback_data": "cabinet_my_data"},
-			},
-			{
-				{"text": "✏️ Редактировать профиль", "callback_data": "cabinet_profile"},
 			},
 			{
 				{"text": "📂 Мои разборы", "callback_data": "cabinet_my_reviews"},

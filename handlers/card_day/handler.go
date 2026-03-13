@@ -6,7 +6,9 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"time"
 
+	"mak_kart_allk_bot/handlers/question"
 	"mak_kart_allk_bot/internal/repository"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
@@ -71,7 +73,46 @@ func HandleGet(bot *tgbotapi.BotAPI, chatID int64, userID int64) {
 		msg := tgbotapi.NewMessage(chatID, caption)
 		msg.ReplyMarkup = keyboard
 		bot.Send(msg)
+		return
 	}
+
+	// Через 6 секунд отправляем короткий подсказочный текст от имени ИИ‑психолога.
+	go func() {
+		time.Sleep(6 * time.Second)
+
+		text := "**На обратной стороне — ИИ‑психолог.**\n\n" +
+			"Он поможет вам разобраться с картой и ответить на ваши вопросы.\n\n" +
+			"Например:\n" +
+			"• Что больше всего привлекло мое внимание на карте?\n" +
+			"• Что я чувствую, глядя на эту карту?\n" +
+			"• Как это связано с моим запросом?"
+
+		msg := tgbotapi.NewMessage(chatID, text)
+		msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
+			tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonData("🏠 Главное меню", "ai_coach_main_menu"),
+			),
+		)
+		if _, err := bot.Send(msg); err != nil {
+			log.Printf("ERROR sending follow-up card day message: %v", err)
+			return
+		}
+
+		// После этого сообщения пользователь может сразу писать ИИ‑психологу.
+
+		// Передаём ИИ‑психологу скрытый контекст о выпавшей карте дня,
+		// чтобы он изначально знал, вокруг какой карты строится диалог.
+		cardContext := "Пользователь только что получил карту дня и рассматривает её. " +
+			"Помогай ему разбирать чувства, ассоциации и вопросы именно по этой карте.\n\n"
+		if card.Title != "" {
+			cardContext += fmt.Sprintf("Название карты: %s\n", card.Title)
+		}
+		if card.Description != "" {
+			cardContext += fmt.Sprintf("Описание карты:\n%s\n", card.Description)
+		}
+
+		question.StartSilentSession(bot, chatID, cardContext)
+	}()
 }
 
 func buildCaption(card *repository.CardDayCard) string {
@@ -86,7 +127,14 @@ func buildCaption(card *repository.CardDayCard) string {
 		caption += card.Description
 	}
 	if caption == "" {
-		caption = "🗓️ Ваша карта дня"
+		caption = "**Как работать с этой картой**\n\n" +
+			"Каждая карта может подсказать вам что‑то важное и подсветить ситуацию с новой стороны. " +
+			"Посмотрите внимательно на изображение: какие чувства, ассоциации, воспоминания и догадки возникают у вас сразу? " +
+			"Не отбрасывайте первые импульсы — именно в них часто скрыт главный смысл.\n\n" +
+			"Попробуйте «зафиксировать» всё, что приходит: вслух, в заметках или хотя бы мысленно, максимально ясно и конкретно. " +
+			"По мере того как вы проговариваете свои ощущения и мысли, ответ на ваш вопрос обычно начинает проявляться сам собой.\n\n" +
+			"Иногда решение лежит на поверхности, иногда — прячется в деталях. " +
+			"Доверяйте своим ассоциациям и внутренним образам: чем внимательнее вы к ним отнесётесь, тем глубже будет ваша личная трактовка карты."
 	}
 	return caption
 }

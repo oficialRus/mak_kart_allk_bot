@@ -398,7 +398,8 @@ func handleCallback(bot *tgbotapi.BotAPI, q *tgbotapi.CallbackQuery, miniappURL,
 	case "cabinet_my_reviews":
 		cabinet.SendCabinetMenu(bot, chatID, "Раздел «Мои разборы» в разработке.")
 	case "cabinet_digital_psychologist":
-		cabinet.SendCabinetMenu(bot, chatID, "Раздел «Цифровой психолог» в разработке.\n\nЗдесь в будущем появятся персональные цифровые разборы и рекомендации по вашему профилю.")
+		// Запускаем диалог с ИИ как с Цифровым психологом.
+		question.HandleDigital(bot, chatID)
 	case "cabinet_number_day":
 		// Из личного кабинета «Цифра дня» открывает то же мини‑приложение, что и в разделе «Подарок».
 		buttonURL := miniappURL
