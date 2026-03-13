@@ -58,6 +58,11 @@ func main() {
 	}
 	log.Println("DB daily numbers table OK")
 
+	if err := db.EnsureCardDayTables(context.Background()); err != nil {
+		log.Fatalf("db ensure card day tables: %v", err)
+	}
+	log.Println("DB card day tables OK")
+
 	token := strings.TrimSpace(os.Getenv("BOT_TOKEN"))
 	if token == "" {
 		log.Fatal("BOT_TOKEN is not set. Проверьте .env в корне проекта и переменную BOT_TOKEN.")
@@ -93,6 +98,9 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/profile", api.ProfileHandler(token))
 	mux.HandleFunc("/api/daily-number", api.DailyNumberHandler(token))
+	mux.HandleFunc("/api/open-cabinet", api.CabinetOpenHandler(token))
+	mux.HandleFunc("/api/admin/upload-card", api.AdminUploadCardHandler())
+	mux.HandleFunc("/api/admin/cards", api.AdminListCardsHandler())
 	go func() {
 		log.Printf("API listening on :%s", apiPort)
 		if err := http.ListenAndServe(":"+apiPort, mux); err != nil {
@@ -140,6 +148,19 @@ func main() {
 			}
 		}
 
+		// Админская загрузка карт: фото с подписью /upload_card
+		if len(update.Message.Photo) > 0 && card_day.IsAdminUploadCaption(update.Message.Caption) {
+			adminIDStr := os.Getenv("ADMIN_TELEGRAM_ID")
+			if adminIDStr != "" {
+				adminID, _ := strconv.ParseInt(adminIDStr, 10, 64)
+				if update.Message.From.ID == adminID {
+					card_day.HandleAdminUpload(bot, chatID, token, update.Message.Photo, update.Message.Caption)
+					continue
+				}
+			}
+			log.Printf("Rejected admin upload from non-admin user %d", update.Message.From.ID)
+		}
+
 		// Если в разделе «Расшифровка карты» мы ждём фото, разрешаем только одно фото.
 		if card_decode.IsWaitingPhoto(chatID) {
 			if len(update.Message.Photo) == 0 {
@@ -173,6 +194,9 @@ func main() {
 				log.Printf("Received /start birth_spread from chat %d", chatID)
 				// Запускаем сценарий с официальной кнопкой «поделиться номером телефона».
 				cabinet.StartRegistration(bot, chatID)
+			} else if payload == "cabinet" {
+				log.Printf("Received /start cabinet from chat %d", chatID)
+				cabinet.Handle(bot, chatID)
 			} else {
 				log.Printf("Received /start from chat %d payload=%q", chatID, payload)
 				handleStart(bot, chatID)
@@ -332,6 +356,8 @@ func handleCallback(bot *tgbotapi.BotAPI, q *tgbotapi.CallbackQuery, miniappURL,
 		card_decode.Handle(bot, chatID)
 	case "ai_coach_card_day":
 		card_day.Handle(bot, chatID)
+	case "card_day_get":
+		card_day.HandleGet(bot, chatID, q.From.ID)
 	case "ai_coach_number_day":
 		number_day.Handle(bot, chatID)
 	case "card_decode_wait_photo":

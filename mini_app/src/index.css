@@ -435,8 +435,8 @@ body {
 .modal-close-app-btn {
   border-radius: 999px;
   padding: 0.6rem 1.9rem;
-  font-size: 0.9rem;
-  font-weight: 500;
+  font-size: 1rem;
+  font-weight: 600;
   letter-spacing: 0.03em;
   border: 1px solid rgba(201, 169, 110, 0.8);
   background: linear-gradient(150deg, #e8dcc0 0%, #c9a96e 100%);

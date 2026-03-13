@@ -765,14 +765,28 @@ export default function App() {
               <button
                 type="button"
                 className="modal-close-app-btn"
-                onClick={() => {
+                onClick={async () => {
                   const w = window as unknown as {
                     Telegram?: {
                       WebApp?: {
+                        initData?: string;
                         close?: () => void;
                       };
                     };
                   };
+                  try {
+                    const initData = w.Telegram?.WebApp?.initData ?? "";
+                    const apiBase = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
+                    if (initData) {
+                      await fetch(`${apiBase}/api/open-cabinet`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ initData }),
+                      }).catch(() => {});
+                    }
+                  } catch {
+                    // ignore
+                  }
                   try {
                     w.Telegram?.WebApp?.close?.();
                   } catch {
@@ -780,7 +794,7 @@ export default function App() {
                   }
                 }}
               >
-                Закрыть приложение
+                Личный кабинет
               </button>
             </div>
           </div>
