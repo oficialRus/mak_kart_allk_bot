@@ -99,6 +99,9 @@ func main() {
 	mux.HandleFunc("/api/profile", api.ProfileHandler(token))
 	mux.HandleFunc("/api/daily-number", api.DailyNumberHandler(token))
 	mux.HandleFunc("/api/open-cabinet", api.CabinetOpenHandler(token))
+	mux.HandleFunc("/api/open-main-menu", api.MainMenuOpenHandler(token))
+	mux.HandleFunc("/api/ai-dialog", api.AiDialogHandler(token))
+	mux.HandleFunc("/api/card-day", api.CardDayHandler(token))
 	mux.HandleFunc("/api/admin/upload-card", api.AdminUploadCardHandler())
 	mux.HandleFunc("/api/admin/cards", api.AdminListCardsHandler())
 	go func() {
@@ -199,7 +202,7 @@ func main() {
 				cabinet.Handle(bot, chatID)
 			} else {
 				log.Printf("Received /start from chat %d payload=%q", chatID, payload)
-				handleStart(bot, chatID)
+				handleStart(bot, chatID, token, miniappURL)
 			}
 			continue
 		}
@@ -215,24 +218,59 @@ func main() {
 	}
 }
 
-func handleStart(bot *tgbotapi.BotAPI, chatID int64) {
-	msg := tgbotapi.NewMessage(chatID, "Привет! Я ваш личный бот‑психолог и коуч.\n\nЯ помогаю:\n— работать с ассоциативными и метафорическими картами\n— разбираться в ваших состояниях через вопросы и подсказки\n— использовать подходы цифровой психологии для самопознания\n\nВыберите одну из кнопок ниже, чтобы продолжить.")
-	keyboard := tgbotapi.NewInlineKeyboardMarkup(
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("🤖 ИИ Психолог-Коуч", "ai_coach"),
-		),
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("📨 Обратная связь", "feedback"),
-			tgbotapi.NewInlineKeyboardButtonData("🎁 Подарок", "gift"),
-		),
-	)
-	msg.ReplyMarkup = keyboard
+func handleStart(bot *tgbotapi.BotAPI, chatID int64, token, miniappURL string) {
+	buttonURL := strings.TrimSpace(miniappURL)
+	if buttonURL == "" {
+		buttonURL = "https://localhost:5173/"
+	}
+	if !strings.Contains(buttonURL, "localhost") {
+		if strings.Contains(buttonURL, "?") {
+			buttonURL += "&screen=main_menu"
+		} else {
+			buttonURL += "?screen=main_menu"
+		}
+	} else {
+		// В режиме localhost в Telegram Mini App всё равно не откроется,
+		// поэтому оставляем примерный адрес без параметров.
+		buttonURL = "https://example.com"
+	}
 
-	if _, err := bot.Send(msg); err != nil {
+	replyMarkup := map[string]interface{}{
+		"inline_keyboard": [][]map[string]interface{}{
+			{
+				{"text": "📨 Обратная связь", "callback_data": "feedback"},
+				{"text": "📱 Открыть приложение", "web_app": map[string]string{"url": buttonURL}},
+			},
+		},
+	}
+	markupJSON, _ := json.Marshal(replyMarkup)
+
+	body := &bytes.Buffer{}
+	w := multipart.NewWriter(body)
+	_ = w.WriteField("chat_id", strconv.FormatInt(chatID, 10))
+	_ = w.WriteField("text", "Привет! Я ваш личный бот‑психолог и коуч.\n\nЧтобы открыть ИИ Психолог-Коуч как мини‑приложение, нажмите кнопку ниже.")
+	_ = w.WriteField("reply_markup", string(markupJSON))
+	_ = w.Close()
+
+	req, err := http.NewRequest(http.MethodPost, "https://api.telegram.org/bot"+token+"/sendMessage", body)
+	if err != nil {
+		log.Printf("ERROR start request: %v", err)
+		return
+	}
+	req.Header.Set("Content-Type", "multipart/form-data; boundary="+w.Boundary())
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
 		log.Printf("ERROR sending start message: %v", err)
 		return
 	}
-	log.Printf("Sent start message to chat %d", chatID)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(resp.Body)
+		log.Printf("ERROR start response: %d %s", resp.StatusCode, string(b))
+		return
+	}
+	log.Printf("Sent start message with mini app button to chat %d", chatID)
 }
 
 const (
@@ -307,7 +345,7 @@ func handleCallback(bot *tgbotapi.BotAPI, q *tgbotapi.CallbackQuery, miniappURL,
 	case "gift_why":
 		_, _ = bot.Send(tgbotapi.NewMessage(chatID, giftWhyText))
 	case "gift_back":
-		handleStart(bot, chatID)
+		handleStart(bot, chatID, token, miniappURL)
 	case "gift_next":
 		mainmenu.Handle(bot, chatID, miniappURL, token)
 	case "main_menu_back":
@@ -380,7 +418,7 @@ func handleCallback(bot *tgbotapi.BotAPI, q *tgbotapi.CallbackQuery, miniappURL,
 		delete(feedbackSuggestionsSessions, chatID)
 		mainmenu.Handle(bot, chatID, miniappURL, token)
 	case "ai_coach_back":
-		handleStart(bot, chatID)
+		handleStart(bot, chatID, token, miniappURL)
 	case "main_menu_ai":
 		sendAiCoachWelcome(bot, chatID, token, miniappURL)
 	case "main_menu_education":

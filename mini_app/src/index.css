@@ -33,10 +33,29 @@ body {
 .page {
   min-height: 100vh;
   min-height: 100dvh;
-  display: grid;
-  place-items: center;
+  display: flex;
+  flex-direction: column;
   padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right)) max(1.5rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
   position: relative;
+}
+
+.page-inner {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.page-inner--blue {
+  background: #0b1f4a;
+}
+
+.page-main {
+  width: 100%;
+  display: flex;
+  justify-content: center;
 }
 
 .app-header {
@@ -81,6 +100,117 @@ body {
 .onboarding-card {
   align-content: flex-start;
   row-gap: 1.4rem;
+}
+
+.main-menu-list {
+  margin-top: 1rem;
+  display: grid;
+  gap: 0.6rem;
+}
+
+.main-menu-item {
+  width: 100%;
+  border-radius: 999px;
+  border: 1px solid rgba(201, 169, 110, 0.7);
+  background: rgba(15, 23, 42, 0.9);
+  color: #e8dcc0;
+  padding: 0.7rem 1.2rem;
+  font-size: 0.95rem;
+  font-weight: 500;
+  text-align: center;
+  cursor: pointer;
+  transition: background-color 140ms ease, border-color 140ms ease, transform 120ms ease, box-shadow 140ms ease;
+}
+
+.main-menu-item:hover {
+  background: rgba(15, 23, 42, 1);
+  border-color: rgba(232, 220, 192, 0.95);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+  transform: translateY(-1px);
+}
+
+.technique-text {
+  margin-top: 1rem;
+  padding: 0.9rem 1rem;
+  border-radius: 16px;
+  background: radial-gradient(circle at 0 0, rgba(30, 64, 175, 0.25) 0%, transparent 45%), rgba(15, 23, 42, 0.9);
+  border: 1px solid rgba(148, 163, 184, 0.6);
+  color: rgba(232, 220, 192, 0.96);
+  font-size: 0.9rem;
+  line-height: 1.5;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.technique-title {
+  margin: 0 0 0.4rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.technique-body {
+  margin: 0;
+  white-space: pre-line;
+}
+
+.dialog-history {
+  margin-top: 1rem;
+  padding: 0.75rem 0.5rem;
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.9);
+  border: 1px solid rgba(148, 163, 184, 0.6);
+  max-height: 220px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.dialog-bubble {
+  padding: 0.5rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.dialog-bubble-user {
+  align-self: flex-end;
+  background: radial-gradient(circle at 0 0, rgba(56, 189, 248, 0.35) 0%, transparent 45%), rgba(15, 23, 42, 0.95);
+  border: 1px solid rgba(56, 189, 248, 0.6);
+}
+
+.dialog-bubble-ai {
+  align-self: flex-start;
+  background: radial-gradient(circle at 0 0, rgba(201, 169, 110, 0.35) 0%, transparent 45%), rgba(15, 23, 42, 0.95);
+  border: 1px solid rgba(201, 169, 110, 0.6);
+}
+
+.dialog-form {
+  margin-top: 0.9rem;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.dialog-input {
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.6);
+  background: rgba(15, 23, 42, 0.9);
+  color: #e8dcc0;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.9rem;
+  resize: vertical;
+  min-height: 3.5rem;
+}
+
+.dialog-input::placeholder {
+  color: rgba(148, 163, 184, 0.8);
+}
+
+.dialog-error {
+  margin-top: 0.5rem;
+  font-size: 0.8rem;
+  color: rgba(248, 113, 113, 0.95);
 }
 
 .onboarding-title {
@@ -372,6 +502,112 @@ body {
 
 .reset-link:hover {
   color: rgba(226, 232, 240, 0.95);
+}
+
+.bottom-nav {
+  width: 100%;
+  max-width: 560px;
+  margin: 0 auto;
+  margin-top: 0.5rem;
+  margin-bottom: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+  position: sticky;
+  bottom: max(3rem, calc(env(safe-area-inset-bottom) + 1.5rem));
+  z-index: 10;
+  padding: 0.45rem 0.7rem;
+  border-radius: 999px;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(30, 64, 175, 0.55) 0%, transparent 55%),
+    radial-gradient(circle at 50% 120%, rgba(15, 23, 42, 0.95) 0%, rgba(5, 10, 20, 0.98) 70%),
+    linear-gradient(120deg, rgba(15, 23, 42, 0.9), rgba(15, 23, 42, 0.98));
+  box-shadow:
+    0 16px 40px rgba(0, 0, 0, 0.7),
+    0 0 0 1px rgba(15, 23, 42, 0.95),
+    0 0 0 1px rgba(201, 169, 110, 0.4),
+    0 0 36px rgba(201, 169, 110, 0.35);
+}
+
+.bottom-nav-button {
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.55);
+  background: rgba(15, 23, 42, 0.88);
+  color: #e8dcc0;
+  font-size: 0.78rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 0.45rem 0.6rem;
+  cursor: pointer;
+  white-space: normal;
+  text-overflow: clip;
+  overflow: visible;
+  text-align: center;
+  line-height: 1.2;
+  transition: background-color 150ms ease, border-color 150ms ease, transform 120ms ease, box-shadow 150ms ease;
+}
+
+.bottom-nav-button--primary {
+  border-color: rgba(201, 169, 110, 0.9);
+  background: radial-gradient(circle at 20% 0%, rgba(248, 250, 252, 0.16) 0%, rgba(15, 23, 42, 0.9) 38%, rgba(15, 23, 42, 0.98) 100%);
+}
+
+.bottom-nav-button--menu {
+  width: 3rem;
+  height: 3rem;
+  border-radius: 50%;
+  padding: 0;
+  max-width: none;
+  justify-self: center;
+  background:
+    radial-gradient(circle at 20% 0%, rgba(248, 250, 252, 0.16) 0%, rgba(15, 23, 42, 0.96) 45%, rgba(15, 23, 42, 1) 100%);
+  border-color: rgba(201, 169, 110, 0.95);
+  box-shadow:
+    0 0 0 1px rgba(201, 169, 110, 0.6),
+    0 10px 26px rgba(0, 0, 0, 0.6),
+    0 0 22px rgba(201, 169, 110, 0.55);
+  transform: translateY(-1px);
+  animation: navButtonGlow 2.6s ease-in-out infinite;
+}
+
+.bottom-nav-button:hover:not(:disabled) {
+  background: rgba(15, 23, 42, 1);
+  border-color: rgba(201, 169, 110, 0.9);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+}
+
+.bottom-nav-button:active:not(:disabled) {
+  transform: translateY(0) scale(0.96);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.55);
+}
+
+@keyframes navButtonGlow {
+  0% {
+    box-shadow:
+      0 0 0 1px rgba(201, 169, 110, 0.6),
+      0 10px 26px rgba(0, 0, 0, 0.6),
+      0 0 10px rgba(201, 169, 110, 0.3);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1px rgba(201, 169, 110, 0.9),
+      0 14px 30px rgba(0, 0, 0, 0.7),
+      0 0 18px rgba(201, 169, 110, 0.6);
+  }
+  100% {
+    box-shadow:
+      0 0 0 1px rgba(201, 169, 110, 0.6),
+      0 10px 26px rgba(0, 0, 0, 0.6),
+      0 0 10px rgba(201, 169, 110, 0.3);
+  }
+}
+
+.bottom-nav-button:disabled {
+  opacity: 0.7;
+  cursor: default;
+  box-shadow: none;
 }
 
 .modal-overlay {
