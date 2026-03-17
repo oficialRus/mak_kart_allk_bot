@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
+	"path/filepath"
 	"strconv"
 
 	"mak_kart_allk_bot/internal/repository"
@@ -19,6 +21,7 @@ type cardDayRequest struct {
 type cardDayResponse struct {
 	Title       string `json:"title"`
 	Description string `json:"description"`
+	ImagePath   string `json:"image_path"`
 }
 
 // CardDayHandler — HTTP‑обработчик для мини‑приложения:
@@ -67,9 +70,15 @@ func CardDayHandler(botToken string) http.HandlerFunc {
 			return
 		}
 
+		publicPath := ""
+		if card.ImagePath != "" {
+			publicPath = "/api/card-image?name=" + url.QueryEscape(filepath.Base(card.ImagePath))
+		}
+
 		resp := cardDayResponse{
 			Title:       card.Title,
 			Description: card.Description,
+			ImagePath:   publicPath,
 		}
 
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")

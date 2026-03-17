@@ -142,6 +142,12 @@ body {
   overflow-y: auto;
 }
 
+.technique-text--card-day {
+  max-height: none;
+  overflow-y: visible;
+  padding: 0.7rem 0.6rem 0.6rem;
+}
+
 .technique-title {
   margin: 0 0 0.4rem;
   font-size: 0.95rem;
@@ -151,6 +157,101 @@ body {
 .technique-body {
   margin: 0;
   white-space: pre-line;
+}
+
+.card-day-grid {
+  margin-top: 1rem;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.card-day-card {
+  position: relative;
+  border: 0;
+  border-radius: 18px;
+  padding: 1.6rem 0.4rem;
+  aspect-ratio: 3 / 4;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(148, 163, 184, 0.45) 0%, rgba(15, 23, 42, 0.98) 40%, rgba(5, 10, 20, 1) 100%);
+  box-shadow:
+    0 10px 24px rgba(0, 0, 0, 0.6),
+    0 0 0 1px rgba(201, 169, 110, 0.4);
+  cursor: pointer;
+  overflow: hidden;
+  transition: transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease, background 160ms ease;
+}
+
+.card-day-card::before {
+  content: "";
+  position: absolute;
+  inset: 9%;
+  border-radius: 14px;
+  background:
+    linear-gradient(145deg, rgba(15, 23, 42, 0.1), rgba(15, 23, 42, 0.85)),
+    radial-gradient(circle at 20% 0%, rgba(248, 250, 252, 0.22) 0%, transparent 55%);
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+.card-day-card--closed {
+  box-shadow:
+    0 10px 24px rgba(0, 0, 0, 0.55),
+    0 0 0 1px rgba(148, 163, 184, 0.5);
+}
+
+.card-day-card--selected {
+  box-shadow:
+    0 14px 32px rgba(0, 0, 0, 0.75),
+    0 0 0 1px rgba(201, 169, 110, 0.9),
+    0 0 18px rgba(201, 169, 110, 0.6);
+  background:
+    radial-gradient(circle at 20% 0%, rgba(248, 250, 252, 0.32) 0%, rgba(15, 23, 42, 0.9) 40%, rgba(5, 10, 20, 1) 100%);
+}
+
+.card-day-card:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 14px 30px rgba(0, 0, 0, 0.7),
+    0 0 0 1px rgba(201, 169, 110, 0.5);
+}
+
+.card-day-card-label {
+  position: relative;
+  z-index: 1;
+  display: block;
+  text-align: center;
+  font-size: 0.8rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(232, 220, 192, 0.9);
+}
+
+.card-day-card--closed .card-day-card-label {
+  opacity: 0.7;
+}
+
+.card-day-card--selected .card-day-card-label {
+  font-weight: 600;
+  color: #f5e9cf;
+}
+
+.card-day-image-wrapper {
+  margin-top: 0.75rem;
+  margin-bottom: 0.5rem;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+.card-day-image {
+  max-width: 100%;
+  border-radius: 18px;
+  box-shadow:
+    0 14px 32px rgba(0, 0, 0, 0.75),
+    0 0 0 1px rgba(201, 169, 110, 0.7);
+  object-fit: contain;
 }
 
 .dialog-history {
@@ -189,6 +290,7 @@ body {
   margin-top: 0.9rem;
   display: grid;
   gap: 0.5rem;
+  width: 100%;
 }
 
 .dialog-input {
@@ -200,7 +302,7 @@ body {
   padding: 0.5rem 0.75rem;
   font-size: 0.9rem;
   resize: vertical;
-  min-height: 3.5rem;
+  min-height: 4.5rem;
 }
 
 .dialog-input::placeholder {
@@ -553,6 +655,30 @@ body {
   background: radial-gradient(circle at 20% 0%, rgba(248, 250, 252, 0.16) 0%, rgba(15, 23, 42, 0.9) 38%, rgba(15, 23, 42, 0.98) 100%);
 }
 
+.bottom-nav-button--active {
+  border-color: rgba(250, 250, 250, 1);
+  background:
+    radial-gradient(circle at 20% 0%, #fdf6dc 0%, #f1dfaf 40%, #c9a96e 100%);
+  color: #0b132b;
+  font-weight: 700;
+  box-shadow:
+    0 14px 34px rgba(0, 0, 0, 0.9),
+    0 0 0 1px rgba(250, 250, 250, 1),
+    0 0 26px rgba(201, 169, 110, 0.95);
+  transform: translateY(-2px) scale(1.02);
+}
+
+/* Дополнительный акцент для круглой кнопки «Меню», когда она активна */
+.bottom-nav-button--menu.bottom-nav-button--active {
+  background:
+    radial-gradient(circle at 20% 0%, #fdf6dc 0%, #f1dfaf 45%, #d3b578 80%, #c9a96e 100%);
+  box-shadow:
+    0 16px 40px rgba(0, 0, 0, 0.95),
+    0 0 0 2px rgba(250, 250, 250, 1),
+    0 0 32px rgba(201, 169, 110, 1);
+  transform: translateY(-3px) scale(1.06);
+}
+
 .bottom-nav-button--menu {
   width: 3rem;
   height: 3rem;
@@ -571,7 +697,7 @@ body {
   animation: navButtonGlow 2.6s ease-in-out infinite;
 }
 
-.bottom-nav-button:hover:not(:disabled) {
+.bottom-nav-button:hover:not(:disabled):not(.bottom-nav-button--active) {
   background: rgba(15, 23, 42, 1);
   border-color: rgba(201, 169, 110, 0.9);
   transform: translateY(-1px);

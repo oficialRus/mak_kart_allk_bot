@@ -6,7 +6,7 @@ cd "$(dirname "$0")"
 echo "→ git pull..."
 git pull
 
-echo "→ go build..."
+echo "→ go build bot..."
 go build -o bin/bot ./cmd/bot
 
 echo "→ останавливаем сервис бота..."

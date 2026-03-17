@@ -1,22 +1,13 @@
 import { useEffect, useState } from "react";
 import { expandViewport, requestFullscreen } from "@telegram-apps/sdk";
+import MainMenuScreen from "./screens/MainMenuScreen";
+import CabinetMenuScreen from "./screens/CabinetMenuScreen";
+import DailyNumberScreen from "./screens/DailyNumberScreen";
+import MyReviewsScreen from "./screens/MyReviewsScreen";
 
 const SECTOR_COUNT = 9;
 const SECTOR_ANGLE = 360 / SECTOR_COUNT; // 40°
 const SPIN_DURATION_MS = 4200;
-const NUMBERS = Array.from({ length: SECTOR_COUNT }, (_, index) => index + 1);
-
-// Геометрия компаса (полярная система)
-const CX = 50;
-const CY = 50;
-const RIM_OUTER_R = 48;
-const WHEEL_OUTER_R = RIM_OUTER_R;
-const RIM_INNER_R = 42;
-const INNER_RING_R = 20; // тонкое кольцо вокруг центра
-const CENTER_CORE_RING_R = 11;
-const NUMBER_RADIUS = 26; // числа чуть ближе к центру
-const SEGMENT_BORDER_STROKE = 0.35;
-const toRad = (deg: number) => (deg * Math.PI) / 180;
 
 function sanitizeFullNameInput(value: string): string {
   // Разрешаем только буквы (кириллица/латиница), пробелы и дефисы. Цифры и прочие символы вырезаем.
@@ -215,24 +206,6 @@ const TECHNIQUES = [
   },
 ];
 
-function polar(cx: number, cy: number, r: number, deg: number) {
-  const rad = toRad(deg);
-  return { x: cx + r * Math.cos(rad), y: cy - r * Math.sin(rad) };
-}
-
-function segmentPath(i: number): string {
-  const startDeg = -90 + i * SECTOR_ANGLE;
-  const endDeg = -90 + (i + 1) * SECTOR_ANGLE;
-  const outerStart = polar(CX, CY, WHEEL_OUTER_R, startDeg);
-  const outerEnd = polar(CX, CY, WHEEL_OUTER_R, endDeg);
-  return `M ${CX} ${CY} L ${outerStart.x} ${outerStart.y} A ${WHEEL_OUTER_R} ${WHEEL_OUTER_R} 0 0 1 ${outerEnd.x} ${outerEnd.y} L ${CX} ${CY} Z`;
-}
-
-function numberPosition(i: number, r: number) {
-  const deg = -90 + (i + 0.5) * SECTOR_ANGLE;
-  return polar(CX, CY, r, deg);
-}
-
 function hashStringToIndex(input: string, modulo: number): number {
   let hash = 0;
   for (let i = 0; i < input.length; i += 1) {
@@ -291,18 +264,30 @@ export default function App() {
   const [showMainMenuScreen, setShowMainMenuScreen] = useState(false);
   const [showCabinetMenuScreen, setShowCabinetMenuScreen] = useState(false);
   const [showAiCoachScreen, setShowAiCoachScreen] = useState(false);
+  const [activeTab, setActiveTab] = useState<"daily" | "menu" | "cabinet">("daily");
   const [showTechniquesList, setShowTechniquesList] = useState(false);
   const [selectedTechniqueId, setSelectedTechniqueId] = useState<number | null>(null);
   const [dialogMessages, setDialogMessages] = useState<{ from: "user" | "ai"; text: string }[]>([]);
   const [dialogInput, setDialogInput] = useState("");
   const [dialogLoading, setDialogLoading] = useState(false);
   const [dialogError, setDialogError] = useState<string | null>(null);
+  const [dialogFromReview, setDialogFromReview] = useState(false);
   const [showDialogScreen, setShowDialogScreen] = useState(false);
   const [showCardDecodeScreen, setShowCardDecodeScreen] = useState(false);
   const [showCardDayScreen, setShowCardDayScreen] = useState(false);
-  const [cardDay, setCardDay] = useState<{ title: string; description: string } | null>(null);
+  const [cardDay, setCardDay] = useState<{ title: string; description: string; imagePath?: string } | null>(null);
   const [cardDayLoading, setCardDayLoading] = useState(false);
   const [cardDayError, setCardDayError] = useState<string | null>(null);
+  const [cardDayChosenToday, setCardDayChosenToday] = useState(false);
+  const [cardDaySelectedIndex, setCardDaySelectedIndex] = useState<number | null>(null);
+  const [cardDayHint, setCardDayHint] = useState<string | null>(null);
+  const [cabinetProfile, setCabinetProfile] = useState<{ fullName: string; birthDate: string; phone?: string } | null>(null);
+  const [cabinetProfileLoading, setCabinetProfileLoading] = useState(false);
+  const [cabinetProfileError, setCabinetProfileError] = useState<string | null>(null);
+  const [showMyReviewsScreen, setShowMyReviewsScreen] = useState(false);
+  const [reviews, setReviews] = useState<{ id: number; mode: string; title: string; createdAt: string }[]>([]);
+  const [reviewsLoading, setReviewsLoading] = useState(false);
+  const [reviewsError, setReviewsError] = useState<string | null>(null);
 
   const [initialScreen] = useState(() => {
     try {
@@ -372,8 +357,10 @@ export default function App() {
       if (!parsed.fullName || !parsed.birthDate) return;
       setProfile(parsed);
       setProfileForm(parsed);
-      // При открытии с существующим профилем — сразу показываем главное меню.
+      // При открытии с существующим профилем — сразу показываем главное меню,
+      // и активной считаем вкладку «Меню».
       setShowMainMenuScreen(true);
+      setActiveTab("menu");
     } catch {
       // ignore
     }
@@ -384,6 +371,7 @@ export default function App() {
   useEffect(() => {
     if (profile && initialScreen === "main_menu") {
       setShowMainMenuScreen(true);
+      setActiveTab("menu");
       setShowCompass(false);
     }
   }, [profile, initialScreen]);
@@ -516,6 +504,7 @@ export default function App() {
     }
     setProfile(cleanProfile);
     setShowMainMenuScreen(true);
+    setActiveTab("menu");
     setIsProfileSubmitting(false);
   };
 
@@ -538,7 +527,7 @@ export default function App() {
     setRotation(0);
   };
 
-  const resultNumber = winningIndex === null ? "-" : NUMBERS[winningIndex];
+  const resultNumber = winningIndex === null ? "-" : winningIndex + 1;
   const handleSpin = () => {
     if (isSpinning) {
       return;
@@ -600,6 +589,124 @@ export default function App() {
       // ignore
     }
     setIsClosingToCabinet(false);
+  };
+
+  const handleSaveDialog = async (mode: string) => {
+    if (!dialogMessages.length) return;
+    const w = window as unknown as { Telegram?: { WebApp?: { initData?: string } } };
+    const initData = w.Telegram?.WebApp?.initData ?? "";
+    const apiBase = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
+    try {
+      await fetch(`${apiBase}/api/dialog-save`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          initData,
+          mode,
+          title: "",
+          messages: dialogMessages.map((m) => ({ from: m.from, text: m.text })),
+        }),
+      });
+    } catch {
+      // игнорируем ошибку сохранения, чтобы не блокировать UX
+    }
+  };
+
+  const handleLoadReviews = async () => {
+    setReviewsError(null);
+    setReviewsLoading(true);
+    const w = window as unknown as { Telegram?: { WebApp?: { initData?: string } } };
+    const initData = w.Telegram?.WebApp?.initData ?? "";
+    const apiBase = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
+    try {
+      const res = await fetch(`${apiBase}/api/dialogs`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ initData, limit: 50 }),
+      });
+      if (!res.ok) {
+        const msg = await res.text();
+        setReviewsError(msg || "Не удалось получить список разборов.");
+        return;
+      }
+      const data = (await res.json()) as { id: number; mode: string; title: string; createdAt: string }[] | null;
+      setReviews(Array.isArray(data) ? data : []);
+    } catch {
+      setReviewsError("Произошла ошибка сети. Попробуйте ещё раз.");
+    } finally {
+      setReviewsLoading(false);
+    }
+  };
+
+  const handleOpenReview = async (id: number) => {
+    const w = window as unknown as { Telegram?: { WebApp?: { initData?: string } } };
+    const initData = w.Telegram?.WebApp?.initData ?? "";
+    const apiBase = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
+    try {
+      const url = new URL(`${apiBase}/api/dialog`, window.location.href);
+      url.searchParams.set("id", String(id));
+      url.searchParams.set("initData", initData);
+      const res = await fetch(url.toString(), {
+        method: "GET",
+      });
+      if (!res.ok) {
+        return;
+      }
+      const data = (await res.json()) as {
+        id: number;
+        mode: string;
+        title: string;
+        createdAt: string;
+        messages: { from: "user" | "ai"; text: string }[];
+      };
+      setDialogMessages(data.messages);
+      setDialogError(null);
+      setDialogInput("");
+      setDialogFromReview(true);
+      setShowMyReviewsScreen(false);
+      setShowAiCoachScreen(true);
+      setShowDialogScreen(true);
+      setShowTechniquesList(false);
+      setShowCardDecodeScreen(false);
+      setShowCardDayScreen(false);
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleLoadCabinetProfile = async () => {
+    setCabinetProfileError(null);
+    setCabinetProfileLoading(true);
+    const w = window as unknown as { Telegram?: { WebApp?: { initData?: string } } };
+    const initData = w.Telegram?.WebApp?.initData ?? "";
+    const apiBase = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
+    try {
+      const res = await fetch(`${apiBase}/api/profile-get`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ initData }),
+      });
+      if (!res.ok) {
+        if (res.status === 404) {
+          setCabinetProfile(null);
+          setCabinetProfileError("Профиль пока не заполнен.");
+        } else {
+          const msg = await res.text();
+          setCabinetProfileError(msg || "Не удалось загрузить профиль.");
+        }
+        return;
+      }
+      const data = (await res.json()) as { fullName: string; birthDate: string; phone?: string };
+      setCabinetProfile({
+        fullName: data.fullName,
+        birthDate: data.birthDate,
+        phone: data.phone,
+      });
+    } catch {
+      setCabinetProfileError("Произошла ошибка сети. Попробуйте ещё раз.");
+    } finally {
+      setCabinetProfileLoading(false);
+    }
   };
 
   if (!profile) {
@@ -744,11 +851,78 @@ export default function App() {
                   <p className="onboarding-subtitle">
                     Здесь вы можете получить свою «карту дня» — короткое послание и подсказку на сегодня.
                   </p>
-                  <div className="technique-text">
+                  <div className="technique-text technique-text--card-day">
                     {cardDayLoading && <p className="technique-body">Подбираем карту дня…</p>}
                     {cardDayError && <p className="dialog-error">{cardDayError}</p>}
+                    {!cardDayChosenToday && !cardDay && !cardDayLoading && !cardDayError && (
+                      <>
+                        <p className="technique-body">Выберите одну из 9 карт ниже. Остальные останутся закрытыми.</p>
+                        <div className="card-day-grid">
+                          {Array.from({ length: 9 }).map((_, idx) => (
+                            <button
+                              key={idx}
+                              type="button"
+                              className={`card-day-card ${cardDaySelectedIndex === idx ? "card-day-card--selected" : "card-day-card--closed"}`}
+                              onClick={async () => {
+                                if (cardDayChosenToday) {
+                                  setCardDayHint("Сегодня вы уже выбрали свою карту дня. Остальные карты откроются завтра.");
+                                  return;
+                                }
+                                setCardDaySelectedIndex(idx);
+                                setCardDayLoading(true);
+                                setCardDayError(null);
+                                setCardDayHint(null);
+                                try {
+                                  const apiBase = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
+                                  const w = window as unknown as { Telegram?: { WebApp?: { initData?: string } } };
+                                  const initData = w.Telegram?.WebApp?.initData ?? "";
+                                  const res = await fetch(`${apiBase}/api/card-day`, {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({ initData }),
+                                  });
+                                  if (!res.ok) {
+                                    const msg = await res.text();
+                                    setCardDayError(msg || "Не удалось получить карту дня. Попробуйте позже.");
+                                    return;
+                                  }
+                                  const data = (await res.json()) as { title: string; description: string; image_path?: string };
+                                  setCardDay({
+                                    title: data.title,
+                                    description: data.description,
+                                    imagePath: data.image_path,
+                                  });
+                                  setCardDayChosenToday(true);
+                                  try {
+                                    const todayKey = getTodayKey();
+                                    window.localStorage.setItem("card_day_chosen_date", todayKey);
+                                  } catch {
+                                    // ignore
+                                  }
+                                } catch {
+                                  setCardDayError("Произошла ошибка сети. Попробуйте ещё раз.");
+                                } finally {
+                                  setCardDayLoading(false);
+                                }
+                              }}
+                            >
+                              <span className="card-day-card-label">Карта {idx + 1}</span>
+                            </button>
+                          ))}
+                        </div>
+                        {cardDayHint && <p className="technique-body">{cardDayHint}</p>}
+                      </>
+                    )}
                     {cardDay && (
                       <>
+                        <p className="technique-body">
+                          Ваша карта дня на сегодня. Следующая карта станет доступна после 00:00 по московскому времени.
+                        </p>
+                        {cardDay.imagePath && (
+                          <div className="card-day-image-wrapper">
+                            <img src={cardDay.imagePath} alt={cardDay.title || "Карта дня"} className="card-day-image" />
+                          </div>
+                        )}
                         {cardDay.title && <h2 className="technique-title">{cardDay.title}</h2>}
                         {cardDay.description && (
                           <p className="technique-body">
@@ -762,30 +936,7 @@ export default function App() {
                         )}
                       </>
                     )}
-                    {!cardDayLoading && !cardDayError && !cardDay && (
-                      <p className="technique-body">
-                        Карта дня пока недоступна. Попробуйте ещё раз позже или обратитесь к ИИ‑Психологу в диалоге.
-                      </p>
-                    )}
                   </div>
-                  <button
-                    type="button"
-                    className="spin-button"
-                    onClick={() => {
-                      setShowCardDayScreen(false);
-                      setShowDialogScreen(true);
-                      const intro =
-                        "Я только что получил(а) карту дня в приложении. Помогите, пожалуйста, разобрать её послание и связать с моей ситуацией.";
-                      setDialogMessages((prev) =>
-                        prev.length > 0 ? prev : [{ from: "user", text: intro }],
-                      );
-                      setDialogError(null);
-                      setDialogInput("");
-                      setDialogLoading(false);
-                    }}
-                  >
-                    Обсудить карту дня с ИИ
-                  </button>
                   <button
                     type="button"
                     className="secondary-button"
@@ -821,6 +972,12 @@ export default function App() {
                       if (!text || dialogLoading) return;
                       setDialogError(null);
                       setDialogLoading(true);
+                      // Формируем историю для отправки на бэкенд:
+                      // предыдущие сообщения + текущее пользовательское.
+                      const historyForRequest = [
+                        ...dialogMessages,
+                        { from: "user" as const, text },
+                      ];
                       setDialogMessages((prev) => [...prev, { from: "user", text }]);
                       setDialogInput("");
 
@@ -831,7 +988,14 @@ export default function App() {
                         const res = await fetch(`${apiBase}/api/ai-dialog`, {
                           method: "POST",
                           headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ initData, message: text }),
+                          body: JSON.stringify({
+                            initData,
+                            message: text,
+                            history: historyForRequest.map((m) => ({
+                              role: m.from === "user" ? "user" : "assistant",
+                              content: m.text,
+                            })),
+                          }),
                         });
                         if (!res.ok) {
                           const msg = await res.text();
@@ -858,10 +1022,15 @@ export default function App() {
                       {dialogLoading ? "Отправляем..." : "Отправить"}
                     </button>
                   </form>
+                  <p className="onboarding-subtitle">
+                    Чтобы сохранить этот разбор и увидеть его позже в разделе «Мои разборы», в конце нажмите кнопку
+                    «Завершить диалог».
+                  </p>
                   <button
                     type="button"
                     className="secondary-button"
-                    onClick={() => {
+                    onClick={async () => {
+                      await handleSaveDialog("dialog");
                       setShowDialogScreen(false);
                       setDialogMessages([]);
                       setDialogError(null);
@@ -871,26 +1040,26 @@ export default function App() {
                   >
                     🛑 Завершить диалог
                   </button>
+                  {dialogFromReview && (
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={() => {
+                        // Закрываем диалог и возвращаемся на экран "Мои разборы".
+                        setShowDialogScreen(false);
+                        setDialogFromReview(false);
+                        setShowAiCoachScreen(false);
+                        setShowMyReviewsScreen(true);
+                      }}
+                    >
+                      ⬅️ Назад к списку разборов
+                    </button>
+                  )}
                 </>
               ) : (
                 <>
                   <p className="onboarding-subtitle">Выберите формат работы, который вам нужен сейчас.</p>
                   <div className="main-menu-list">
-                    <button
-                      type="button"
-                      className="main-menu-item"
-                      onClick={() => {
-                        setShowTechniquesList(false);
-                        setSelectedTechniqueId(null);
-                        setShowDialogScreen(true);
-                        setDialogMessages([]);
-                        setDialogError(null);
-                        setDialogInput("");
-                        setDialogLoading(false);
-                      }}
-                    >
-                      Диалог
-                    </button>
                     <button
                       type="button"
                       className="main-menu-item"
@@ -924,34 +1093,49 @@ export default function App() {
                         setSelectedTechniqueId(null);
                         setCardDay(null);
                         setCardDayError(null);
-                        setCardDayLoading(true);
-
-                        (async () => {
-                          try {
-                            const apiBase = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
-                            const w = window as unknown as { Telegram?: { WebApp?: { initData?: string } } };
-                            const initData = w.Telegram?.WebApp?.initData ?? "";
-                            const res = await fetch(`${apiBase}/api/card-day`, {
-                              method: "POST",
-                              headers: { "Content-Type": "application/json" },
-                              body: JSON.stringify({ initData }),
-                            });
-                            if (!res.ok) {
-                              const msg = await res.text();
-                              setCardDayError(msg || "Не удалось получить карту дня. Попробуйте позже.");
-                            } else {
-                              const data = (await res.json()) as { title: string; description: string };
-                              setCardDay({
-                                title: data.title,
-                                description: data.description,
-                              });
-                            }
-                          } catch {
-                            setCardDayError("Произошла ошибка сети. Попробуйте ещё раз.");
-                          } finally {
+                        setCardDayHint(null);
+                        setCardDaySelectedIndex(null);
+                        try {
+                          const todayKey = getTodayKey();
+                          const chosenDate = window.localStorage.getItem("card_day_chosen_date");
+                          const alreadyChosen = chosenDate === todayKey;
+                          setCardDayChosenToday(alreadyChosen);
+                          const apiBase = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
+                          const w = window as unknown as { Telegram?: { WebApp?: { initData?: string } } };
+                          const initData = w.Telegram?.WebApp?.initData ?? "";
+                          if (alreadyChosen) {
+                            setCardDayLoading(true);
+                            (async () => {
+                              try {
+                                const res = await fetch(`${apiBase}/api/card-day`, {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ initData }),
+                                });
+                                if (!res.ok) {
+                                  const msg = await res.text();
+                                  setCardDayError(msg || "Не удалось получить карту дня. Попробуйте позже.");
+                                  return;
+                                }
+                                const data = (await res.json()) as { title: string; description: string; image_path?: string };
+                                setCardDay({
+                                  title: data.title,
+                                  description: data.description,
+                                  imagePath: data.image_path,
+                                });
+                              } catch {
+                                setCardDayError("Произошла ошибка сети. Попробуйте ещё раз.");
+                              } finally {
+                                setCardDayLoading(false);
+                              }
+                            })();
+                          } else {
                             setCardDayLoading(false);
                           }
-                        })();
+                        } catch {
+                          setCardDayChosenToday(false);
+                          setCardDayLoading(false);
+                        }
                       }}
                     >
                       Карта дня
@@ -960,7 +1144,13 @@ export default function App() {
                       type="button"
                       className="main-menu-item"
                       onClick={() => {
-                        // позже можно связать с раскладом по дате рождения
+                        // Открываем диалог о раскладе по дате рождения.
+                        setShowAiCoachScreen(false);
+                        setShowCompass(true);
+                        setShowMainMenuScreen(false);
+                        setShowCabinetMenuScreen(false);
+                        setActiveTab("daily");
+                        setShowBirthSpreadModal(true);
                       }}
                     >
                       Получить расклад по дате рождения
@@ -973,30 +1163,39 @@ export default function App() {
           <nav className="bottom-nav">
             <button
               type="button"
-              className="bottom-nav-button bottom-nav-button--primary"
+              className={`bottom-nav-button bottom-nav-button--primary ${activeTab === "daily" ? "bottom-nav-button--active" : ""}`}
               onClick={() => {
                 setShowAiCoachScreen(false);
                 setShowCompass(true);
+                setShowMainMenuScreen(false);
+                setShowCabinetMenuScreen(false);
+                setActiveTab("daily");
               }}
             >
               Цифра дня
             </button>
             <button
               type="button"
-              className="bottom-nav-button bottom-nav-button--menu"
+              className={`bottom-nav-button bottom-nav-button--menu ${activeTab === "menu" ? "bottom-nav-button--active" : ""}`}
               onClick={() => {
                 setShowAiCoachScreen(false);
                 setShowMainMenuScreen(true);
+                setShowCabinetMenuScreen(false);
+                setShowCompass(false);
+                setActiveTab("menu");
               }}
             >
               Меню
             </button>
             <button
               type="button"
-              className="bottom-nav-button bottom-nav-button--primary"
+              className={`bottom-nav-button bottom-nav-button--primary ${activeTab === "cabinet" ? "bottom-nav-button--active" : ""}`}
               onClick={() => {
                 setShowAiCoachScreen(false);
                 setShowCabinetMenuScreen(true);
+                setShowMainMenuScreen(false);
+                setShowCompass(false);
+                setActiveTab("cabinet");
               }}
             >
               Личный кабинет
@@ -1004,525 +1203,109 @@ export default function App() {
           </nav>
         </div>
       </main>
+    );
+  }
+
+  if (showMyReviewsScreen) {
+    return (
+      <MyReviewsScreen
+        reviews={reviews}
+        loading={reviewsLoading}
+        error={reviewsError}
+        onBack={() => {
+          setShowMyReviewsScreen(false);
+          setShowCabinetMenuScreen(true);
+        }}
+        onOpenReview={handleOpenReview}
+      />
     );
   }
 
   if (showMainMenuScreen) {
     return (
-      <main className="page">
-        <header className="app-header">
-          <img src="/logo.png" alt="Гармония-Мак — Самопознание" className="app-logo" />
-        </header>
-        <div className="page-inner page-inner--blue">
-          <div className="page-main">
-            <section className="roulette-card onboarding-card">
-              <h1 className="onboarding-title">Меню</h1>
-              <p className="onboarding-subtitle">Выберите раздел, с которого хотите начать.</p>
-              <div className="main-menu-list">
-                <button
-                  type="button"
-                  className="main-menu-item"
-                  onClick={() => {
-                    setShowMainMenuScreen(false);
-                    setShowAiCoachScreen(true);
-                  }}
-                >
-                  ИИ‑Психолог Коуч
-                </button>
-                <button
-                  type="button"
-                  className="main-menu-item"
-                  onClick={() => {
-                    setShowMainMenuScreen(false);
-                    setShowCompass(false);
-                  }}
-                >
-                  Обучение
-                </button>
-                <button
-                  type="button"
-                  className="main-menu-item"
-                  onClick={() => {
-                    setShowMainMenuScreen(false);
-                    setShowCompass(false);
-                  }}
-                >
-                  Магазин
-                </button>
-              </div>
-            </section>
-          </div>
-          <nav className="bottom-nav">
-            <button
-              type="button"
-              className="bottom-nav-button bottom-nav-button--primary"
-              onClick={() => {
-                setShowMainMenuScreen(false);
-                setShowCompass(true);
-              }}
-            >
-              Цифра дня
-            </button>
-            <button
-              type="button"
-              className="bottom-nav-button bottom-nav-button--menu"
-              onClick={() => {
-                // уже на главном меню — ничего не делаем
-              }}
-            >
-              Меню
-            </button>
-            <button
-              type="button"
-              className="bottom-nav-button bottom-nav-button--primary"
-              onClick={() => {
-                setShowMainMenuScreen(false);
-                setShowCabinetMenuScreen(true);
-              }}
-            >
-              Личный кабинет
-            </button>
-          </nav>
-        </div>
-      </main>
+      <MainMenuScreen
+        onOpenDaily={() => {
+          setShowMainMenuScreen(false);
+          setShowCompass(true);
+          setActiveTab("daily");
+        }}
+        onOpenAiCoach={() => {
+          setShowMainMenuScreen(false);
+          setShowAiCoachScreen(true);
+          setActiveTab("menu");
+        }}
+        onOpenCabinet={() => {
+          setShowMainMenuScreen(false);
+          setShowCabinetMenuScreen(true);
+          setActiveTab("cabinet");
+        }}
+        onOpenDigitalPsychologist={() => {
+          setShowMainMenuScreen(false);
+          setShowAiCoachScreen(true);
+          setShowTechniquesList(false);
+          setSelectedTechniqueId(null);
+          setShowDialogScreen(true);
+          setDialogMessages([]);
+          setDialogError(null);
+          setDialogInput("");
+          setDialogLoading(false);
+        }}
+        activeTab={activeTab}
+      />
     );
   }
 
   if (showCabinetMenuScreen) {
     return (
-      <main className="page">
-        <header className="app-header">
-          <img src="/logo.png" alt="Гармония-Мак — Самопознание" className="app-logo" />
-        </header>
-        <div className="page-inner page-inner--blue">
-          <div className="page-main">
-            <section className="roulette-card onboarding-card">
-              <h1 className="onboarding-title">Личный кабинет</h1>
-              <p className="onboarding-subtitle">Что вы хотите открыть сейчас?</p>
-              <div className="main-menu-list">
-                <button
-                  type="button"
-                  className="main-menu-item"
-                  onClick={() => {
-                    // Мои данные — пока просто остаёмся в приложении.
-                  }}
-                >
-                  Мои данные
-                </button>
-                <button
-                  type="button"
-                  className="main-menu-item"
-                  onClick={() => {
-                    // Мои разборы — заглушка, можно позже связать с ботом.
-                  }}
-                >
-                  Мои разборы
-                </button>
-                <button
-                  type="button"
-                  className="main-menu-item"
-                  onClick={() => {
-                    // Цифровой психолог — пока без отдельного экрана в мини‑приложении.
-                  }}
-                >
-                  Цифровой психолог
-                </button>
-                <button
-                  type="button"
-                  className="main-menu-item"
-                  onClick={() => {
-                    // Обучение — также можно будет связать с ботом.
-                  }}
-                >
-                  Обучение
-                </button>
-              </div>
-            </section>
-          </div>
-          <nav className="bottom-nav">
-            <button
-              type="button"
-              className="bottom-nav-button bottom-nav-button--primary"
-              onClick={() => {
-                setShowCabinetMenuScreen(false);
-                setShowCompass(true);
-              }}
-            >
-              Цифра дня
-            </button>
-            <button
-              type="button"
-              className="bottom-nav-button bottom-nav-button--menu"
-              onClick={() => {
-                setShowCabinetMenuScreen(false);
-                setShowMainMenuScreen(true);
-              }}
-            >
-              Меню
-            </button>
-            <button
-              type="button"
-              className="bottom-nav-button bottom-nav-button--primary"
-              onClick={() => {
-                // Уже на экране личного кабинета.
-              }}
-            >
-              Личный кабинет
-            </button>
-          </nav>
-        </div>
-      </main>
+      <CabinetMenuScreen
+        onOpenDaily={() => {
+          setShowCabinetMenuScreen(false);
+          setShowCompass(true);
+          setActiveTab("daily");
+        }}
+        onOpenMenu={() => {
+          setShowCabinetMenuScreen(false);
+          setShowMainMenuScreen(true);
+          setActiveTab("menu");
+        }}
+        onShowMyData={handleLoadCabinetProfile}
+        myData={cabinetProfile}
+        myDataLoading={cabinetProfileLoading}
+        myDataError={cabinetProfileError}
+        onOpenMyReviews={() => {
+          setShowCabinetMenuScreen(false);
+          setShowMyReviewsScreen(true);
+          void handleLoadReviews();
+        }}
+        activeTab={activeTab}
+      />
     );
   }
 
   return (
-    <main className="page">
-      <header className="app-header">
-        <img src="/logo.png" alt="Гармония-Мак — Самопознание" className="app-logo" />
-      </header>
-
-      <div className="page-inner">
-        <div className="page-main">
-          {showCompass && (
-            <section className="roulette-card">
-              <p className="compass-promo">
-                Нажми «Крутить» — и узнай свою цифру дня
-              </p>
-              <div className="wheel-area">
-                <div className="pointer" aria-hidden="true" />
-
-                <div className="wheel-shell">
-                  <div className={`wheel-outer ${isSpinning ? "is-spinning" : ""}`}>
-                    <div
-                      className="wheel"
-                      style={
-                        {
-                          "--rotation": `${rotation}deg`,
-                        } as React.CSSProperties
-                      }
-                      aria-label="Рулетка с девятью сегментами"
-                    >
-                      <svg
-                        className="wheel-svg"
-                        viewBox="0 0 100 100"
-                        preserveAspectRatio="xMidYMid meet"
-                        aria-label="Компас цифровой психологии — девять направлений"
-                      >
-                <defs>
-                  {/* Градиенты секторов (тёмно-синие, плавные) */}
-                  {SEGMENT_GRADIENTS.map((g, i) => {
-                    const end = polar(50, 50, 50, -90 + (i + 0.5) * SECTOR_ANGLE);
-                    return (
-                      <linearGradient
-                        key={i}
-                        id={`segmentGrad-${i}`}
-                        x1="50"
-                        y1="50"
-                        x2={String(end.x)}
-                        y2={String(end.y)}
-                        gradientUnits="userSpaceOnUse"
-                      >
-                        <stop offset="0%" stopColor={g.from} />
-                        <stop offset="100%" stopColor={g.to} />
-                      </linearGradient>
-                    );
-                  })}
-                  {/* Мягкое свечение центра — премиальное медитативное ощущение */}
-                  <radialGradient id="centerGlow" cx="50%" cy="50%" r="50%">
-                    <stop offset="0%" stopColor="#E8DCC0" stopOpacity="0.85" />
-                    <stop offset="28%" stopColor={ACCENT_GOLD} stopOpacity="0.4" />
-                    <stop offset="60%" stopColor={ACCENT_GOLD} stopOpacity="0.12" />
-                    <stop offset="100%" stopColor="#0B132B" stopOpacity="0" />
-                  </radialGradient>
-                  {/* Переливающееся золотое свечение по внешнему кругу */}
-                  <linearGradient id="outerSweepGrad" x1="0" y1="0" x2="100" y2="0" gradientUnits="userSpaceOnUse">
-                    <stop offset="0%" stopColor={ACCENT_GOLD} stopOpacity="0" />
-                    <stop offset="35%" stopColor={ACCENT_GOLD} stopOpacity="0.05" />
-                    <stop offset="50%" stopColor={ACCENT_GOLD} stopOpacity="0.55" />
-                    <stop offset="65%" stopColor={ACCENT_GOLD} stopOpacity="0.05" />
-                    <stop offset="100%" stopColor={ACCENT_GOLD} stopOpacity="0" />
-                    <animateTransform
-                      attributeName="gradientTransform"
-                      type="rotate"
-                      from="0 50 50"
-                      to="360 50 50"
-                      dur="9s"
-                      repeatCount="indefinite"
-                    />
-                  </linearGradient>
-                  <filter id="centerGlowFilter" x="-80%" y="-80%" width="260%" height="260%">
-                    <feGaussianBlur in="SourceGraphic" stdDeviation="3.2" result="blur" />
-                    <feMerge>
-                      <feMergeNode in="blur" />
-                      <feMergeNode in="SourceGraphic" />
-                    </feMerge>
-                  </filter>
-                </defs>
-
-                {/* Секторы компаса (9 равных направлений), плавные переходы */}
-                {NUMBERS.map((n, i) => (
-                  <path
-                    key={i}
-                    d={segmentPath(i)}
-                    fill={`url(#segmentGrad-${i})`}
-                    stroke="rgba(201, 169, 110, 0.08)"
-                    strokeWidth={0.25}
-                  />
-                ))}
-
-                {/* Тонкие радиальные линии навигации (только основные) */}
-                {NUMBERS.map((_, i) => {
-                  const angle = -90 + i * SECTOR_ANGLE;
-                  const outer = polar(CX, CY, WHEEL_OUTER_R, angle);
-                  return (
-                    <line
-                      key={`radial-${i}`}
-                      x1={CX}
-                      y1={CY}
-                      x2={outer.x}
-                      y2={outer.y}
-                      stroke="rgba(201, 169, 110, 0.14)"
-                      strokeWidth={0.2}
-                    />
-                  );
-                })}
-
-                {/* Мелкие тики компаса по внешнему кольцу */}
-                {NUMBERS.map((_, i) => {
-                  const angle = -90 + i * SECTOR_ANGLE;
-                  const inner = polar(CX, CY, TICK_INNER_R, angle);
-                  const outer = polar(CX, CY, TICK_OUTER_R, angle);
-                  return (
-                    <line
-                      key={`tick-${i}`}
-                      x1={inner.x}
-                      y1={inner.y}
-                      x2={outer.x}
-                      y2={outer.y}
-                      stroke="rgba(201, 169, 110, 0.38)"
-                      strokeWidth={0.4}
-                    />
-                  );
-                })}
-
-                {/* Числа: чуть ближе к центру, крупнее (+15–20%), минимальная типографика */}
-                {NUMBERS.map((n, i) => {
-                  const pos = numberPosition(i, NUMBER_RADIUS);
-                  return (
-                    <text
-                      key={i}
-                      x={pos.x}
-                      y={pos.y}
-                      textAnchor="middle"
-                      dominantBaseline="central"
-                      fill={NUMBER_COLOR}
-                      fontSize="7.8"
-                      fontWeight="500"
-                      fontFamily="system-ui, -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif"
-                      style={{ letterSpacing: "0.02em" }}
-                    >
-                      {n}
-                    </text>
-                  );
-                })}
-
-                {/* Внешнее золотое кольцо */}
-                <circle
-                  cx={CX}
-                  cy={CY}
-                  r={OUTER_RING_R}
-                  fill="none"
-                  stroke={ACCENT_GOLD}
-                  strokeWidth={OUTER_RING_STROKE}
-                  strokeLinejoin="round"
-                  opacity={0.5}
-                />
-                {/* Переливающееся по кругу золотое свечение */}
-                <circle
-                  cx={CX}
-                  cy={CY}
-                  r={OUTER_RING_R + 0.3}
-                  fill="none"
-                  stroke="url(#outerSweepGrad)"
-                  strokeWidth={OUTER_RING_STROKE * 1.15}
-                  strokeLinecap="round"
-                  opacity={0.9}
-                />
-                {/* "Молния" по внешнему кругу — короткий яркий сегмент, который бежит по окружности */}
-                <circle
-                  cx={CX}
-                  cy={CY}
-                  r={OUTER_RING_R + 1.1}
-                  fill="none"
-                  stroke={ACCENT_GOLD}
-                  strokeWidth={0.65}
-                  strokeLinecap="round"
-                  strokeDasharray="5 40"
-                  strokeOpacity={0.0}
-                >
-                  <animate
-                    attributeName="stroke-opacity"
-                    values="0;1;0"
-                    dur="1.8s"
-                    repeatCount="indefinite"
-                  />
-                  <animateTransform
-                    attributeName="transform"
-                    type="rotate"
-                    from="0 50 50"
-                    to="360 50 50"
-                    dur="3.6s"
-                    repeatCount="indefinite"
-                  />
-                </circle>
-
-                {/* Тонкое кольцо вокруг центра */}
-                <circle
-                  cx={CX}
-                  cy={CY}
-                  r={INNER_RING_R}
-                  fill="none"
-                  stroke="rgba(201, 169, 110, 0.28)"
-                  strokeWidth={0.45}
-                />
-
-                {/* Компасные направления N / E / S / W по внешнему кругу */}
-                {[
-                  { label: "N", angle: -90 },
-                  { label: "E", angle: 0 },
-                  { label: "S", angle: 90 },
-                  { label: "W", angle: 180 },
-                ].map((dir) => {
-                  const pos = polar(CX, CY, OUTER_RING_R + 4, dir.angle);
-                  return (
-                    <text
-                      key={dir.label}
-                      x={pos.x}
-                      y={pos.y}
-                      textAnchor="middle"
-                      dominantBaseline="central"
-                      fill="rgba(232, 220, 192, 0.9)"
-                      fontSize="4.6"
-                      fontWeight="600"
-                      fontFamily="system-ui, -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif"
-                      letterSpacing="0.08em"
-                    >
-                      {dir.label}
-                    </text>
-                  );
-                })}
-
-                {/* Центр: мягкое свечение + тонкое кольцо вокруг ядра + лёгкие радиальные лучи */}
-                <g filter="url(#centerGlowFilter)">
-                  {[0, 45, 90, 135, 180, 225, 270, 315].map((deg) => {
-                    const end = polar(CX, CY, 14, deg);
-                    return (
-                      <line
-                        key={deg}
-                        x1={CX}
-                        y1={CY}
-                        x2={end.x}
-                        y2={end.y}
-                        stroke={ACCENT_GOLD}
-                        strokeWidth={0.3}
-                        opacity={0.28}
-                      />
-                    );
-                  })}
-                  <circle cx={CX} cy={CY} r="13" fill="url(#centerGlow)" />
-                  <circle cx={CX} cy={CY} r={CENTER_CORE_RING_R} fill="none" stroke="rgba(232, 220, 192, 0.4)" strokeWidth="0.4" />
-                  <circle
-                    className="wheel-center-core"
-                    cx={CX}
-                    cy={CY}
-                    r="4.5"
-                    fill={ACCENT_GOLD}
-                    stroke="rgba(232, 220, 192, 0.85)"
-                    strokeWidth="0.45"
-                  />
-                      </g>
-                      </svg>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <button className={`spin-button ${isSpinning ? "loading" : ""}`} onClick={handleSpin} disabled={isSpinning}>
-                {isSpinning ? "Крутим..." : "Крутить"}
-              </button>
-
-              {hasResult && (
-                <div className="result-text">
-                  <p className="result-title">Ваша цифра дня: {resultNumber}</p>
-                  <p className="result-description">
-                    {dailyMessage
-                      ? dailyMessage
-                      : `Описание: сегодня число ${resultNumber} подсказывает держать курс на приоритеты и не распыляться.`}
-                  </p>
-                  <button type="button" className="secondary-button" onClick={() => setShowBirthSpreadModal(true)}>
-                    Сделать расклад по дате рождения
-                  </button>
-                </div>
-              )}
-              <button type="button" className="reset-link" onClick={handleResetProfile}>
-                /delete — очистить локальные данные
-              </button>
-            </section>
-          )}
-        </div>
-
-        <nav className="bottom-nav">
-          <button
-            type="button"
-            className="bottom-nav-button bottom-nav-button--primary"
-            onClick={() => setShowCompass(true)}
-          >
-            Цифра дня
-          </button>
-          <button
-            type="button"
-            className="bottom-nav-button bottom-nav-button--menu"
-            onClick={() => {
-              setShowMainMenuScreen(true);
-            }}
-            >
-            Меню
-          </button>
-          <button
-            type="button"
-            className="bottom-nav-button bottom-nav-button--primary"
-            onClick={() => {
-              setShowMainMenuScreen(false);
-              setShowCabinetMenuScreen(true);
-            }}
-          >
-            Личный кабинет
-          </button>
-        </nav>
-      </div>
-
-      {showBirthSpreadModal && (
-        <div className="modal-overlay" onClick={() => setShowBirthSpreadModal(false)} aria-hidden="false">
-          <div className="modal-box" onClick={(e) => e.stopPropagation()}>
-            <button
-              type="button"
-              className="modal-close"
-              onClick={() => setShowBirthSpreadModal(false)}
-              aria-label="Закрыть"
-            >
-              ×
-            </button>
-            <p className="modal-text">
-              Перейдите в личный кабинет бота, чтобы получить свой расклад по дате рождения.
-            </p>
-            <div className="modal-actions">
-              <button type="button" className="modal-close-app-btn" onClick={handleOpenCabinet}>
-                Личный кабинет
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </main>
+    <DailyNumberScreen
+      showCompass={showCompass}
+      rotation={rotation}
+      isSpinning={isSpinning}
+      hasResult={hasResult}
+      resultNumber={resultNumber}
+      dailyMessage={dailyMessage}
+      showBirthSpreadModal={showBirthSpreadModal}
+      onSpin={handleSpin}
+      onResetProfile={handleResetProfile}
+      onOpenMenu={() => {
+        setShowMainMenuScreen(true);
+        setActiveTab("menu");
+      }}
+      onOpenCabinet={() => {
+        setShowMainMenuScreen(false);
+        setShowCabinetMenuScreen(true);
+        setActiveTab("cabinet");
+      }}
+      onOpenBirthSpreadModal={() => setShowBirthSpreadModal(true)}
+      onCloseBirthSpreadModal={() => setShowBirthSpreadModal(false)}
+      onOpenCabinetFromModal={handleOpenCabinet}
+      activeTab={activeTab}
+    />
   );
 }

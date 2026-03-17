@@ -2,7 +2,10 @@
 <html lang="ru">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
     <title>Рулетка дня</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script>
@@ -21,6 +24,36 @@
           expand();
         }
         window.addEventListener('load', expand);
+
+        // Жёстко отключаем увеличение/масштабирование на мобильных
+        var lastTouchEnd = 0;
+        document.addEventListener(
+          'touchstart',
+          function (event) {
+            if (event.touches.length > 1) {
+              event.preventDefault();
+            }
+          },
+          { passive: false }
+        );
+        document.addEventListener(
+          'touchend',
+          function (event) {
+            var now = new Date().getTime();
+            if (now - lastTouchEnd <= 300) {
+              event.preventDefault();
+            }
+            lastTouchEnd = now;
+          },
+          { passive: false }
+        );
+        document.addEventListener(
+          'gesturestart',
+          function (event) {
+            event.preventDefault();
+          },
+          { passive: false }
+        );
       })();
     </script>
   </head>
