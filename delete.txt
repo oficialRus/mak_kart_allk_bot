@@ -14,3 +14,23 @@ BEGIN
 END
 \$\$;
 "
+
+
+----------------------------------------------------------------------------------------------------------------------------
+Что делает этот цикл:
+пробегается по всем файлам в data/cards,
+для каждого берёт только имя файла (без пути),
+вставляет строку в card_day_cards:
+
+
+cd /opt/mak_kart_allk_bot
+
+for f in data/cards/*; do
+  [ -f "$f" ] || continue
+  name="$(basename "$f")"
+  echo "Регистрация карты: $name"
+  PGPASSWORD="changeme" psql -h localhost -p 5432 -U mak_bot -d mak_kart_allk_bot -c \
+    "INSERT INTO card_day_cards (image_path, title, description)
+     VALUES ('$name', '', '')
+     ON CONFLICT DO NOTHING;"
+done

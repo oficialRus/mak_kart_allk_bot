@@ -26,9 +26,10 @@ const aiCoachSystemPrompt = `Ты — ИИ Психолог-Коуч. Веди �
 После 2–3 обменов сообщениями переходи от вопросов к более развёрнутому ответу и конкретным мягким рекомендациям (что человек может почувствовать, заметить, попробовать сделать). Не проси описывать одно и то же снова и снова другими словами.`
 
 type aiDialogRequest struct {
-	InitData string            `json:"initData"`
-	Message  string            `json:"message"`
-	History  []historyMessage  `json:"history"`
+	InitData     string           `json:"initData"`
+	Message      string           `json:"message"`
+	History      []historyMessage `json:"history"`
+	ImageDataURL string           `json:"imageDataUrl,omitempty"`
 }
 
 type aiDialogResponse struct {
@@ -81,11 +82,6 @@ func AiDialogHandler(botToken string) http.HandlerFunc {
 			return
 		}
 
-		// Собираем сообщения для LLM: системный промпт + история + текущее сообщение.
-		messages := []openai.Message{
-			{Role: "system", Content: aiCoachSystemPrompt},
-		}
-
 		// Берём не всю историю подряд, а, например, последние 10–12 сообщений,
 		// чтобы не раздувать контекст.
 		const maxHistory = 12
@@ -93,35 +89,82 @@ func AiDialogHandler(botToken string) http.HandlerFunc {
 		if len(h) > maxHistory {
 			h = h[len(h)-maxHistory:]
 		}
-		for _, m := range h {
-			role := strings.ToLower(strings.TrimSpace(m.Role))
-			if role != "user" && role != "assistant" {
-				continue
+
+		var resp openai.Response
+		var userErr *openai.UserError
+
+		imageData := strings.TrimSpace(req.ImageDataURL)
+		if imageData != "" {
+			// Если вместе с сообщением пришло изображение (data URL),
+			// формируем единый текстовый промпт с учётом истории и
+			// передаём его вместе с картинкой в vision‑модель.
+			var b strings.Builder
+			b.WriteString("Контекст беседы между человеком и ИИ‑Психологом-Коучем.\n")
+			b.WriteString("История последних сообщений (от старых к новым):\n")
+			for _, m := range h {
+				role := strings.ToLower(strings.TrimSpace(m.Role))
+				if role != "user" && role != "assistant" {
+					continue
+				}
+				text := strings.TrimSpace(m.Content)
+				if text == "" {
+					continue
+				}
+				if role == "user" {
+					b.WriteString("Пользователь: ")
+				} else {
+					b.WriteString("ИИ: ")
+				}
+				b.WriteString(text)
+				b.WriteString("\n\n")
 			}
-			text := strings.TrimSpace(m.Content)
-			if text == "" {
-				continue
+			b.WriteString("Текущее сообщение пользователя, отправленное вместе с изображением:\n")
+			b.WriteString(req.Message)
+			b.WriteString("\n\nПроанализируй ситуацию, учитывая и текст, и содержимое прикреплённой фотографии. ")
+			b.WriteString("Сохраняй тон бережного психолога-коуча, как описано в системных инструкциях.\n")
+
+			resp, userErr = openai.ChatCompletionWithImage(
+				context.Background(),
+				apiKey,
+				b.String(),
+				imageData,
+			)
+		} else {
+			// Обычный текстовый диалог: системный промпт + история + текущее сообщение.
+			messages := []openai.Message{
+				{Role: "system", Content: aiCoachSystemPrompt},
 			}
+
+			for _, m := range h {
+				role := strings.ToLower(strings.TrimSpace(m.Role))
+				if role != "user" && role != "assistant" {
+					continue
+				}
+				text := strings.TrimSpace(m.Content)
+				if text == "" {
+					continue
+				}
+				messages = append(messages, openai.Message{
+					Role:    role,
+					Content: text,
+				})
+			}
+
+			// Добавляем текущее сообщение пользователя в конец.
 			messages = append(messages, openai.Message{
-				Role:    role,
-				Content: text,
+				Role:    "user",
+				Content: req.Message,
 			})
+
+			resp, userErr = openai.ChatCompletion(
+				context.Background(),
+				apiKey,
+				openai.Request{
+					Model:    openai.DefaultModel,
+					Messages: messages,
+				},
+			)
 		}
-
-		// Добавляем текущее сообщение пользователя в конец.
-		messages = append(messages, openai.Message{
-			Role:    "user",
-			Content: req.Message,
-		})
-
-		resp, userErr := openai.ChatCompletion(
-			context.Background(),
-			apiKey,
-			openai.Request{
-				Model: openai.DefaultModel,
-				Messages: messages,
-			},
-		)
 		if userErr != nil {
 			log.Printf("api ai-dialog: completion error: %v", userErr)
 			http.Error(w, userErr.Text, http.StatusBadGateway)

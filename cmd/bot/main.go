@@ -141,7 +141,7 @@ func handleStart(bot *tgbotapi.BotAPI, chatID int64, miniappURL string) {
 	if buttonURL == "" {
 		buttonURL = "https://app.garmonia-mak.ru/"
 	}
-	text := "Это мини‑приложение «Цифра дня» и ИИ‑психолог‑коуч.\n\nОно считает вашу личную цифру дня, даёт пояснение к ней и позволяет поработать с цифрой и картами через диалог с ИИ‑коучем.\n\nЧтобы открыть мини‑приложение, нажмите кнопку ниже."
+	text := "ЭТО — ваш ИИ-психолог-коуч и проводник по внутренним состояниям.\n\nЧерез цифры, карты и ассоциации\nон помогает понять, что с вами происходит на самом деле\nи прийти к ясности.\n\nЧтобы начать работу с собой,\nоткройте приложение ниже."
 
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
@@ -176,7 +176,7 @@ func handleStart(bot *tgbotapi.BotAPI, chatID int64, miniappURL string) {
 const (
 	// Локальный путь до картинки, которая показывается в приветственном сообщении /start.
 	// Положите сюда нужное изображение (например, картинку карты).
-	startImagePath = "data/cards/start_welcome.jpg"
+	startImagePath = "data/cards/start_welcome.jpg.webp.webp"
 
 	feedbackURL = "https://t.me/RyslanNovikov"
 	siteURL     = "https://www.garmonia-mak.ru/"

@@ -56,6 +56,93 @@ body {
   width: 100%;
   display: flex;
   justify-content: center;
+  position: relative;
+}
+
+/* Карточка со звёздами на фоне (главное меню, ИИ‑коуч, компас, кабинет и т.д.) */
+.roulette-card--stars {
+  position: relative;
+  overflow: hidden;
+}
+
+.roulette-card--stars > *:not(.main-menu-atmosphere) {
+  position: relative;
+  z-index: 1;
+}
+
+.roulette-card--stars > .main-menu-atmosphere {
+  z-index: 0;
+}
+
+.main-menu-atmosphere {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.main-menu-star {
+  position: absolute;
+  color: rgba(232, 220, 192, 0.5);
+  text-shadow: 0 0 10px rgba(201, 169, 110, 0.35);
+  animation: menu-star-float 7s ease-in-out infinite, menu-star-pulse 2.8s ease-in-out infinite;
+}
+
+.main-menu-star--1 {
+  top: 6%;
+  left: 14%;
+  font-size: 1rem;
+  animation-delay: 0.15s;
+}
+
+.main-menu-star--2 {
+  top: 18%;
+  right: 16%;
+  font-size: 0.9rem;
+  animation-delay: 0.75s;
+}
+
+.main-menu-star--3 {
+  top: 48%;
+  left: 8%;
+  font-size: 0.8rem;
+  animation-delay: 1.1s;
+}
+
+.main-menu-star--4 {
+  top: 68%;
+  right: 9%;
+  font-size: 0.95rem;
+  animation-delay: 1.6s;
+}
+
+.main-menu-star--5 {
+  top: 82%;
+  left: 20%;
+  font-size: 0.85rem;
+  animation-delay: 2.1s;
+}
+
+@keyframes menu-star-pulse {
+  0%,
+  100% {
+    opacity: 0.25;
+    transform: scale(0.9);
+  }
+  50% {
+    opacity: 0.75;
+    transform: scale(1.05);
+  }
+}
+
+@keyframes menu-star-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
 }
 
 .app-header {
@@ -102,6 +189,20 @@ body {
   row-gap: 1.4rem;
 }
 
+.page-main-image {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  padding: 0 1.5rem 0.75rem;
+}
+
+.page-main-image__img {
+  max-width: min(90vw, 540px);
+  width: 100%;
+  height: auto;
+  object-fit: contain;
+}
+
 .main-menu-list {
   margin-top: 1rem;
   display: grid;
@@ -129,6 +230,257 @@ body {
   transform: translateY(-1px);
 }
 
+.feedback-card {
+  margin-top: 0.75rem;
+  width: 100%;
+  border-radius: 18px;
+  padding: 0.9rem 1rem 1rem;
+  background:
+    radial-gradient(circle at 0 0, rgba(30, 64, 175, 0.28) 0%, transparent 45%),
+    rgba(15, 23, 42, 0.96);
+  border: 1px solid rgba(148, 163, 184, 0.7);
+  box-shadow:
+    0 12px 30px rgba(0, 0, 0, 0.6),
+    0 0 0 1px rgba(15, 23, 42, 0.9);
+}
+
+.feedback-card__title {
+  margin: 0 0 0.6rem;
+  text-align: left;
+  font-size: 0.9rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(232, 220, 192, 0.85);
+}
+
+.feedback-card__list {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.feedback-card__item {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  width: 100%;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.7);
+  background: rgba(15, 23, 42, 0.9);
+  color: #e8dcc0;
+  padding: 0.55rem 0.9rem;
+  font-size: 0.88rem;
+  cursor: pointer;
+  text-align: left;
+  transition: background-color 140ms ease, border-color 140ms ease, transform 120ms ease, box-shadow 140ms ease;
+}
+
+.feedback-card__item:hover {
+  background: rgba(15, 23, 42, 1);
+  border-color: rgba(201, 169, 110, 0.9);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+  transform: translateY(-1px);
+}
+
+.feedback-card__icon {
+  width: 1.4rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.15rem;
+}
+
+.feedback-card__label {
+  flex: 1;
+}
+
+/* Обучение: вводный текст, опрос, кубики */
+.learning-intro-text {
+  margin: 0;
+  text-align: center;
+  font-size: clamp(0.88rem, 3.2vw, 0.98rem);
+  line-height: 1.55;
+  color: rgba(232, 220, 192, 0.88);
+  max-width: 420px;
+}
+
+.learning-cta {
+  width: 100%;
+  max-width: 320px;
+}
+
+.learning-survey {
+  width: 100%;
+  display: grid;
+  gap: 1.1rem;
+  margin-top: 0.25rem;
+}
+
+.learning-survey-block {
+  text-align: left;
+  width: 100%;
+}
+
+.learning-survey-label {
+  margin: 0 0 0.45rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(201, 169, 110, 0.9);
+}
+
+.learning-survey-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.learning-survey-options--stack {
+  flex-direction: column;
+}
+
+.learning-option {
+  flex: 1 1 auto;
+  min-width: min(100%, 140px);
+  border-radius: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.55);
+  background: rgba(15, 23, 42, 0.88);
+  color: #e8dcc0;
+  padding: 0.55rem 0.75rem;
+  font-size: 0.86rem;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: center;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    transform 120ms ease;
+}
+
+.learning-survey-options--stack .learning-option {
+  min-width: 100%;
+  text-align: left;
+}
+
+.learning-option:hover {
+  border-color: rgba(201, 169, 110, 0.65);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+}
+
+.learning-option--active {
+  border-color: rgba(201, 169, 110, 0.95);
+  background: radial-gradient(circle at 0 0, rgba(201, 169, 110, 0.18) 0%, transparent 55%), rgba(15, 23, 42, 0.95);
+  box-shadow:
+    0 0 0 1px rgba(201, 169, 110, 0.35),
+    0 8px 20px rgba(0, 0, 0, 0.4);
+}
+
+.learning-summary {
+  width: 100%;
+  margin: 0.25rem 0 0.5rem;
+  padding: 0.85rem 1rem;
+  border-radius: 16px;
+  background: radial-gradient(circle at 0 0, rgba(30, 64, 175, 0.22) 0%, transparent 45%), rgba(15, 23, 42, 0.92);
+  border: 1px solid rgba(148, 163, 184, 0.55);
+  font-size: 0.88rem;
+  line-height: 1.5;
+  color: rgba(232, 220, 192, 0.92);
+  text-align: left;
+}
+
+.learning-summary p {
+  margin: 0.35rem 0;
+}
+
+.learning-summary p:first-child {
+  margin-top: 0;
+}
+
+.learning-summary p:last-child {
+  margin-bottom: 0;
+}
+
+.learning-summary-key {
+  color: rgba(201, 169, 110, 0.95);
+  font-weight: 600;
+  margin-right: 0.35rem;
+}
+
+.learning-cubes {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+  margin-top: 0.35rem;
+}
+
+@media (min-width: 480px) {
+  .learning-cubes {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.65rem;
+  }
+}
+
+.learning-cube {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.4rem;
+  min-height: 140px;
+  padding: 1rem 0.75rem 1.1rem;
+  border-radius: 20px;
+  border: 1px solid rgba(201, 169, 110, 0.45);
+  background:
+    radial-gradient(circle at 50% 0%, rgba(22, 32, 52, 0.85) 0%, rgba(11, 19, 43, 0.96) 45%, #0b132b 100%);
+  box-shadow:
+    0 14px 32px rgba(0, 0, 0, 0.45),
+    0 0 0 0.5px rgba(201, 169, 110, 0.12);
+  color: #e8dcc0;
+  cursor: pointer;
+  text-align: center;
+  transition: transform 140ms ease, border-color 140ms ease, box-shadow 160ms ease;
+}
+
+.learning-cube:hover:not(:disabled) {
+  transform: translateY(-2px);
+  border-color: rgba(232, 220, 192, 0.55);
+  box-shadow:
+    0 18px 40px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(201, 169, 110, 0.35);
+}
+
+.learning-cube:disabled,
+.learning-cube--soon {
+  opacity: 0.72;
+  cursor: not-allowed;
+}
+
+.learning-cube__icon {
+  font-size: 1.75rem;
+  line-height: 1;
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.4));
+}
+
+.learning-cube__title {
+  font-size: 0.92rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.learning-cube__hint {
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: rgba(232, 220, 192, 0.72);
+}
+
+.spin-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
+
 .technique-text {
   margin-top: 1rem;
   padding: 0.9rem 1rem;
@@ -148,6 +500,26 @@ body {
   padding: 0.7rem 0.6rem 0.6rem;
 }
 
+.technique-text--birth-code {
+  max-height: 320px;
+}
+
+.birth-code-section-title {
+  margin: 0.8rem 0 0.35rem;
+  font-size: 0.9rem;
+  color: rgba(232, 220, 192, 0.94);
+}
+
+.birth-code-list {
+  margin: 0.2rem 0 0.2rem 1rem;
+  padding: 0;
+  color: rgba(232, 220, 192, 0.92);
+}
+
+.birth-code-list li {
+  margin: 0.2rem 0;
+}
+
 .technique-title {
   margin: 0 0 0.4rem;
   font-size: 0.95rem;
@@ -157,6 +529,13 @@ body {
 .technique-body {
   margin: 0;
   white-space: pre-line;
+}
+
+.technique-scroll-hint {
+  margin: 0.4rem 0 0;
+  font-size: 0.78rem;
+  text-align: center;
+  color: rgba(232, 220, 192, 0.7);
 }
 
 .card-day-grid {
@@ -291,6 +670,39 @@ body {
   display: grid;
   gap: 0.5rem;
   width: 100%;
+}
+
+.dialog-attachments {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.dialog-attach-button {
+  position: relative;
+  border-radius: 999px;
+  border: 1px dashed rgba(148, 163, 184, 0.8);
+  background: rgba(15, 23, 42, 0.8);
+  color: rgba(232, 220, 192, 0.9);
+  padding: 0.35rem 0.9rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.dialog-attach-input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.dialog-attach-hint {
+  font-size: 0.8rem;
+  color: rgba(232, 220, 192, 0.8);
 }
 
 .dialog-input {
@@ -571,24 +983,46 @@ body {
   font-size: clamp(0.92rem, 3.6vw, 1.02rem);
 }
 
+/* Кнопки «Назад» и вторичные действия.
+   Уникальный цвет (бирюзово‑сине‑зелёный), который больше нигде не используется,
+   чтобы визуально отличать все возвратные действия от остальных кнопок. */
 .secondary-button {
   margin-top: 0.85rem;
   border-radius: 999px;
   padding: 0.55rem 1.6rem;
   font-size: 0.9rem;
-  font-weight: 500;
+  font-weight: 600;
   letter-spacing: 0.03em;
-  border: 1px solid rgba(201, 169, 110, 0.6);
-  background: rgba(15, 23, 42, 0.85);
-  color: #e8dcc0;
+  border: 1px solid rgba(56, 189, 180, 0.95); /* бирюзовый контур */
+  background: linear-gradient(145deg, #0f766e 0%, #0891b2 45%, #22c1c3 100%);
+  color: #e6fffa;
   cursor: pointer;
-  transition: background-color 160ms ease, border-color 160ms ease, transform 120ms ease;
+  box-shadow:
+    0 8px 22px rgba(0, 0, 0, 0.38),
+    0 0 0 1px rgba(15, 23, 42, 0.55),
+    inset 0 1px 0 rgba(240, 253, 250, 0.35);
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    transform 120ms ease,
+    box-shadow 160ms ease,
+    color 160ms ease;
 }
 
 .secondary-button:hover {
-  background: rgba(15, 23, 42, 0.95);
-  border-color: rgba(201, 169, 110, 0.9);
+  background: linear-gradient(145deg, #14b8a6 0%, #06b6d4 45%, #2dd4bf 100%);
+  border-color: rgba(45, 212, 191, 1);
+  color: #ecfeff;
+  box-shadow:
+    0 12px 28px rgba(0, 0, 0, 0.42),
+    0 0 0 1px rgba(45, 212, 191, 0.85),
+    inset 0 1px 0 rgba(240, 253, 250, 0.55);
   transform: translateY(-1px);
+}
+
+.secondary-button:focus-visible {
+  outline: 2px solid rgba(201, 169, 110, 0.95);
+  outline-offset: 3px;
 }
 
 .reset-link {

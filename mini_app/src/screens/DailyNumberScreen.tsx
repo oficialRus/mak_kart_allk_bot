@@ -1,4 +1,5 @@
 import type React from "react";
+import CardStarAtmosphere from "../components/CardStarAtmosphere";
 
 const SECTOR_COUNT = 9;
 const SECTOR_ANGLE = 360 / SECTOR_COUNT;
@@ -97,7 +98,8 @@ const DailyNumberScreen: React.FC<DailyNumberScreenProps> = ({
       <div className="page-inner">
         <div className="page-main">
           {showCompass && (
-            <section className="roulette-card">
+            <section className="roulette-card roulette-card--stars">
+              <CardStarAtmosphere />
               <p className="compass-promo">
                 Нажми «Крутить» — и узнай свою цифру дня
               </p>

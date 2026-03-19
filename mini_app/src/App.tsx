@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { expandViewport, requestFullscreen } from "@telegram-apps/sdk";
 import MainMenuScreen from "./screens/MainMenuScreen";
 import CabinetMenuScreen from "./screens/CabinetMenuScreen";
 import DailyNumberScreen from "./screens/DailyNumberScreen";
 import MyReviewsScreen from "./screens/MyReviewsScreen";
+import CardStarAtmosphere from "./components/CardStarAtmosphere";
 
 const SECTOR_COUNT = 9;
 const SECTOR_ANGLE = 360 / SECTOR_COUNT; // 40°
@@ -102,6 +103,15 @@ function validateBirthDate(raw: string): { normalized?: string; error?: string }
 type Profile = {
   fullName: string;
   birthDate: string;
+};
+
+type BirthCodeReport = {
+  personalityType: string;
+  keyEnergy: string;
+  decisionPattern: string;
+  strengths: string[];
+  conflicts: string[];
+  focusNow: string;
 };
 
 const STORAGE_KEY_PROFILE = "garmonia_compass_profile_v1";
@@ -220,6 +230,90 @@ function getTodayKey() {
   return now.toISOString().slice(0, 10); // YYYY-MM-DD
 }
 
+function toRootNumber(value: number): number {
+  let n = Math.abs(value);
+  while (n > 9) {
+    n = String(n)
+      .split("")
+      .reduce((sum, d) => sum + Number(d), 0);
+  }
+  return n === 0 ? 1 : n;
+}
+
+function buildBirthCodeReport(birthDate: string): BirthCodeReport {
+  const digits = birthDate.replace(/\D+/g, "");
+  const nums = digits.split("").map((d) => Number(d)).filter((n) => Number.isFinite(n));
+  const sumAll = nums.reduce((s, n) => s + n, 0);
+  const lifeCode = toRootNumber(sumAll);
+  const day = Number(digits.slice(0, 2) || "1");
+  const month = Number(digits.slice(2, 4) || "1");
+  const dayCode = toRootNumber(day);
+  const monthCode = toRootNumber(month);
+
+  const personalities = [
+    "Исследователь чувств и смыслов",
+    "Эмпатичный коммуникатор",
+    "Системный стратег",
+    "Создатель новых решений",
+    "Проводник через перемены",
+    "Гармонизатор отношений",
+    "Интуитивный аналитик",
+    "Практик с внутренней глубиной",
+    "Вдохновляющий наставник",
+  ];
+  const energies = [
+    "мягкая внутренняя устойчивость",
+    "сила диалога и поддержки",
+    "ясность структуры и порядка",
+    "творческая смелость",
+    "готовность обновляться",
+    "баланс и объединение людей",
+    "глубокая интуиция",
+    "фокус на результате",
+    "видение будущего шага",
+  ];
+
+  const personalityType = personalities[(lifeCode - 1) % personalities.length];
+  const keyEnergy = energies[(dayCode + monthCode - 2 + energies.length) % energies.length];
+
+  const decisionPattern =
+    lifeCode % 2 === 0
+      ? "Вы чаще принимаете решения через анализ и проверку фактов, но в стрессовых ситуациях можете затягивать выбор."
+      : "Вы чаще принимаете решения через внутреннее ощущение правильного шага, но иногда спешите, если эмоции слишком сильные.";
+
+  const strengths = [
+    "Умение чувствовать суть ситуации и выделять главное.",
+    lifeCode >= 5
+      ? "Быстрая адаптация к изменениям и новым условиям."
+      : "Способность выстраивать стабильность и опору для себя и близких.",
+    dayCode >= 5
+      ? "Смелость проявляться и брать инициативу."
+      : "Внимательность к деталям и качеству решений.",
+  ];
+
+  const conflicts = [
+    "Колебания между \"делать правильно\" и \"делать по-настоящему своё\".",
+    monthCode % 2 === 0
+      ? "Накопление напряжения из-за повышенного контроля."
+      : "Эмоциональные перепады и сомнения перед важным шагом.",
+    "Склонность обесценивать уже пройденный путь.",
+  ];
+
+  const focusNow =
+    lifeCode >= 7
+      ? "Снизить внутренний шум, вернуться к телесным ощущениям и выбрать один конкретный шаг на ближайшие 48 часов."
+      : "Укрепить личные границы, определить 1 приоритет на неделю и действовать без распыления.";
+
+  return {
+    personalityType,
+    keyEnergy,
+    decisionPattern,
+    strengths,
+    conflicts,
+    focusNow,
+  };
+}
+
 // Внешнее золотое кольцо компаса
 const OUTER_RING_R = 47.8;
 const OUTER_RING_STROKE = 0.85;
@@ -272,6 +366,8 @@ export default function App() {
   const [dialogLoading, setDialogLoading] = useState(false);
   const [dialogError, setDialogError] = useState<string | null>(null);
   const [dialogFromReview, setDialogFromReview] = useState(false);
+  const [dialogImageDataUrl, setDialogImageDataUrl] = useState<string | null>(null);
+  const [dialogAllowImage, setDialogAllowImage] = useState(true);
   const [showDialogScreen, setShowDialogScreen] = useState(false);
   const [showCardDecodeScreen, setShowCardDecodeScreen] = useState(false);
   const [showCardDayScreen, setShowCardDayScreen] = useState(false);
@@ -288,6 +384,10 @@ export default function App() {
   const [reviews, setReviews] = useState<{ id: number; mode: string; title: string; createdAt: string }[]>([]);
   const [reviewsLoading, setReviewsLoading] = useState(false);
   const [reviewsError, setReviewsError] = useState<string | null>(null);
+  const [showBirthCodeIntro, setShowBirthCodeIntro] = useState(false);
+  const [showBirthCodeLoading, setShowBirthCodeLoading] = useState(false);
+  const [birthCodeReport, setBirthCodeReport] = useState<BirthCodeReport | null>(null);
+  const dialogHistoryRef = useRef<HTMLDivElement | null>(null);
 
   const [initialScreen] = useState(() => {
     try {
@@ -348,8 +448,52 @@ export default function App() {
     return () => clearTimeout(t);
   }, []);
 
-  // Загружаем профиль из localStorage, если пользователь уже вводил данные.
+  // Критично: для Telegram-пользователя ориентируемся на профиль в БД.
+  // Если профиля в БД нет (первый запуск), показываем экран регистрации.
+  // localStorage используем только как fallback для локальной разработки без initData.
   useEffect(() => {
+    const w = window as unknown as { Telegram?: { WebApp?: { initData?: string } } };
+    const initData = w.Telegram?.WebApp?.initData ?? "";
+    const apiBase = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
+
+    if (initData) {
+      (async () => {
+        try {
+          const res = await fetch(`${apiBase}/api/profile-get`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ initData }),
+          });
+
+          if (!res.ok) {
+            // 404 => профиль не создан: остаёмся на экране регистрации.
+            return;
+          }
+
+          const data = (await res.json()) as { fullName: string; birthDate: string };
+          if (!data.fullName || !data.birthDate) return;
+
+          const parsed: Profile = {
+            fullName: data.fullName,
+            birthDate: data.birthDate,
+          };
+          setProfile(parsed);
+          setProfileForm(parsed);
+          setShowMainMenuScreen(true);
+          setActiveTab("menu");
+          try {
+            window.localStorage.setItem(STORAGE_KEY_PROFILE, JSON.stringify(parsed));
+          } catch {
+            // ignore
+          }
+        } catch {
+          // Если сеть недоступна, ничего не ломаем: пользователь остаётся на регистрации.
+        }
+      })();
+      return;
+    }
+
+    // Локальная разработка без Telegram initData.
     try {
       const raw = window.localStorage.getItem(STORAGE_KEY_PROFILE);
       if (!raw) return;
@@ -357,8 +501,6 @@ export default function App() {
       if (!parsed.fullName || !parsed.birthDate) return;
       setProfile(parsed);
       setProfileForm(parsed);
-      // При открытии с существующим профилем — сразу показываем главное меню,
-      // и активной считаем вкладку «Меню».
       setShowMainMenuScreen(true);
       setActiveTab("menu");
     } catch {
@@ -375,6 +517,20 @@ export default function App() {
       setShowCompass(false);
     }
   }, [profile, initialScreen]);
+
+  // Автопрокрутка чата к последнему сообщению:
+  // срабатывает на новые сообщения и во время появления индикатора "печатает...".
+  useEffect(() => {
+    if (!showDialogScreen) return;
+    const el = dialogHistoryRef.current;
+    if (!el) return;
+    requestAnimationFrame(() => {
+      el.scrollTo({
+        top: el.scrollHeight,
+        behavior: "smooth",
+      });
+    });
+  }, [dialogMessages, dialogLoading, showDialogScreen]);
 
   // При наличии профиля запрашиваем "цифру дня" с бэкенда.
   // Если запрос недоступен (например, при локальной разработке без Telegram WebApp),
@@ -709,6 +865,146 @@ export default function App() {
     }
   };
 
+  const handleSaveCabinetProfile = async (data: { fullName: string; birthDate: string }): Promise<{ ok: boolean; error?: string }> => {
+    const fullNameCheck = validateFullName(data.fullName);
+    if (fullNameCheck.error) {
+      return { ok: false, error: fullNameCheck.error };
+    }
+    const birthDateCheck = validateBirthDate(data.birthDate);
+    if (birthDateCheck.error) {
+      return { ok: false, error: birthDateCheck.error };
+    }
+
+    const fullName = (fullNameCheck.normalized ?? data.fullName.trim()).replace(/\s+/g, " ");
+    const birthDate = birthDateCheck.normalized ?? data.birthDate.trim();
+
+    const w = window as unknown as { Telegram?: { WebApp?: { initData?: string } } };
+    const initData = w.Telegram?.WebApp?.initData ?? "";
+    const apiBase = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
+
+    try {
+      const res = await fetch(`${apiBase}/api/profile`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          initData,
+          fullName,
+          birthDate,
+        }),
+      });
+      if (!res.ok) {
+        const msg = await res.text();
+        return { ok: false, error: msg || "Не удалось сохранить данные." };
+      }
+
+      setCabinetProfile((prev) => ({
+        fullName,
+        birthDate,
+        phone: prev?.phone,
+      }));
+
+      // Обновляем профиль приложения, чтобы остальные расчёты использовали новые данные.
+      const updatedProfile: Profile = { fullName, birthDate };
+      setProfile(updatedProfile);
+      setProfileForm(updatedProfile);
+      try {
+        window.localStorage.setItem(STORAGE_KEY_PROFILE, JSON.stringify(updatedProfile));
+      } catch {
+        // ignore
+      }
+
+      return { ok: true };
+    } catch {
+      return { ok: false, error: "Произошла ошибка сети. Попробуйте ещё раз." };
+    }
+  };
+
+  const openCardDayDialogWithAi = async () => {
+    if (!cardDay) return;
+
+    const userMessage = [
+      "Хочу разобрать мою карту дня с ИИ‑психологом.",
+      cardDay.title ? `Название карты: ${cardDay.title}` : "",
+      cardDay.description ? `Описание карты: ${cardDay.description}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+
+    setShowCardDayScreen(false);
+    setShowDialogScreen(true);
+    setShowTechniquesList(false);
+    setShowCardDecodeScreen(false);
+    setDialogFromReview(false);
+    setDialogAllowImage(false);
+    setDialogMessages([{ from: "user", text: userMessage }]);
+    setDialogInput("");
+    setDialogError(null);
+    setDialogLoading(true);
+
+    let imageDataUrl: string | null = null;
+    try {
+      const rawImagePath = (cardDay.imagePath ?? "").trim();
+      if (rawImagePath) {
+        if (rawImagePath.startsWith("data:")) {
+          imageDataUrl = rawImagePath;
+        } else {
+          const absoluteImageURL = new URL(rawImagePath, window.location.href).toString();
+          const imageResp = await fetch(absoluteImageURL);
+          if (imageResp.ok) {
+            const blob = await imageResp.blob();
+            imageDataUrl = await new Promise<string>((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onloadend = () => {
+                if (typeof reader.result === "string") {
+                  resolve(reader.result);
+                } else {
+                  reject(new Error("failed to convert image blob to data url"));
+                }
+              };
+              reader.onerror = () => reject(reader.error ?? new Error("file reader error"));
+              reader.readAsDataURL(blob);
+            });
+          }
+        }
+      }
+    } catch {
+      // Если изображение не получилось подготовить — продолжаем с текстом.
+      imageDataUrl = null;
+    }
+
+    try {
+      const apiBase = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
+      const w = window as unknown as { Telegram?: { WebApp?: { initData?: string } } };
+      const initData = w.Telegram?.WebApp?.initData ?? "";
+      const res = await fetch(`${apiBase}/api/ai-dialog`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          initData,
+          message: userMessage,
+          history: [],
+          imageDataUrl,
+        }),
+      });
+
+      if (!res.ok) {
+        const msg = await res.text();
+        setDialogError(msg || "Не удалось получить ответ. Попробуйте ещё раз позже.");
+        return;
+      }
+
+      const data = (await res.json()) as { reply: string };
+      if (data.reply?.trim()) {
+        setDialogMessages((prev) => [...prev, { from: "ai", text: data.reply.trim() }]);
+      }
+    } catch {
+      setDialogError("Произошла ошибка сети. Попробуйте ещё раз.");
+    } finally {
+      setDialogLoading(false);
+      setDialogImageDataUrl(null);
+    }
+  };
+
   if (!profile) {
     return (
       <main className="page">
@@ -769,38 +1065,74 @@ export default function App() {
         </header>
         <div className="page-inner page-inner--blue">
           <div className="page-main">
-            <section className="roulette-card onboarding-card">
+            <section className="roulette-card onboarding-card roulette-card--stars">
+              <CardStarAtmosphere />
               <h1 className="onboarding-title">ИИ‑Психолог Коуч</h1>
               {showTechniquesList ? (
                 <>
                   <p className="onboarding-subtitle">Выберите технику, чтобы прочитать подробное описание.</p>
-                  <div className="main-menu-list">
-                    {TECHNIQUES.map((t) => (
-                      <button
-                        key={t.id}
-                        type="button"
-                        className="main-menu-item"
-                        onClick={() => setSelectedTechniqueId(t.id)}
-                      >
-                        {t.title}
-                      </button>
-                    ))}
-                  </div>
-                  {selectedTechnique && (
-                    <div className="technique-text">
-                      <h2 className="technique-title">{selectedTechnique.title}</h2>
-                      <p className="technique-body">{selectedTechnique.text}</p>
+                  {!selectedTechnique && (
+                    <div className="main-menu-list">
+                      {TECHNIQUES.map((t) => (
+                        <button
+                          key={t.id}
+                          type="button"
+                          className="main-menu-item"
+                          onClick={() => setSelectedTechniqueId(t.id)}
+                        >
+                          {t.title}
+                        </button>
+                      ))}
                     </div>
+                  )}
+                  {selectedTechnique && (
+                    <>
+                      <div className="technique-text">
+                        <h2 className="technique-title">{selectedTechnique.title}</h2>
+                        <p className="technique-body">{selectedTechnique.text}</p>
+                      </div>
+                      <p className="technique-scroll-hint">Проведите вверх, чтобы прочитать технику полностью</p>
+                      <button
+                        type="button"
+                        className="spin-button"
+                        style={{ marginTop: "0.4rem" }}
+                        onClick={() => {
+                          // Переходим в диалог с ИИ‑психологом и передаём туда выбранную технику.
+                          setShowTechniquesList(false);
+                          setShowDialogScreen(true);
+                          setShowCardDecodeScreen(false);
+                          setShowCardDayScreen(false);
+                          setDialogAllowImage(false);
+                          setDialogMessages([
+                            {
+                              from: "user",
+                              text: `Хочу разобрать технику с ИИ‑психологом.\n\n${selectedTechnique.title}\n\n${selectedTechnique.text}`,
+                            },
+                          ]);
+                          setDialogError(null);
+                          setDialogInput("");
+                          setDialogLoading(false);
+                        }}
+                      >
+                        Разобрать технику с ИИ‑психологом
+                      </button>
+                    </>
                   )}
                   <button
                     type="button"
                     className="secondary-button"
                     onClick={() => {
-                      setShowTechniquesList(false);
-                      setSelectedTechniqueId(null);
+                      if (selectedTechnique) {
+                        // Возвращаемся к списку техник.
+                        setSelectedTechniqueId(null);
+                      } else {
+                        // Возвращаемся к выбору режимов работы.
+                        setShowTechniquesList(false);
+                        setSelectedTechniqueId(null);
+                      }
                     }}
                   >
-                    ⬅️ Назад к режимам работы
+                    {selectedTechnique ? "⬅️ Назад к техникам" : "⬅️ Назад к режимам работы"}
                   </button>
                 </>
               ) : showCardDecodeScreen ? (
@@ -934,6 +1266,15 @@ export default function App() {
                             {`Посмотрите на свою карту и отметьте:\n• какие детали привлекают внимание;\n• какие чувства и мысли появляются;\n• с какими ситуациями в вашей жизни это перекликается.`}
                           </p>
                         )}
+                        <button
+                          type="button"
+                          className="spin-button"
+                          onClick={() => {
+                            void openCardDayDialogWithAi();
+                          }}
+                        >
+                          Разобрать карту с ИИ психологом
+                        </button>
                       </>
                     )}
                   </div>
@@ -947,12 +1288,126 @@ export default function App() {
                     ⬅️ Назад к режимам работы
                   </button>
                 </>
+              ) : showBirthCodeIntro ? (
+                <>
+                  <h2 className="technique-title">Ваш психологический код по дате рождения</h2>
+                  <div className="technique-text">
+                    <p className="technique-body">
+                      {`Это не просто расчёт.\n\nДата рождения — это структура вашей личности:\nваши сильные стороны, внутренние конфликты,\nповеденческие паттерны и точки роста.\n\nЯ разберу её и покажу,\nкак вы мыслите, принимаете решения\nи что сейчас влияет на ваше состояние.\n\nОткройте ниже, чтобы получить свой разбор.`}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="spin-button"
+                    onClick={() => {
+                      setShowBirthCodeIntro(false);
+                      setShowBirthCodeLoading(true);
+                      setBirthCodeReport(null);
+                      window.setTimeout(() => {
+                        setBirthCodeReport(buildBirthCodeReport(profile?.birthDate ?? ""));
+                        setShowBirthCodeLoading(false);
+                      }, 2200);
+                    }}
+                  >
+                    👉 Получить разбор
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => {
+                      setShowBirthCodeIntro(false);
+                    }}
+                  >
+                    ⬅️ Назад к режимам работы
+                  </button>
+                </>
+              ) : showBirthCodeLoading ? (
+                <>
+                  <h2 className="technique-title">Я анализирую вашу дату…</h2>
+                  <div className="technique-text">
+                    <p className="technique-body">
+                      {`Смотрю на ключевые числа,\nповеденческие паттерны\nи текущие внутренние процессы.\n\nЭто займёт несколько секунд.`}
+                    </p>
+                  </div>
+                </>
+              ) : birthCodeReport ? (
+                <>
+                  <h2 className="technique-title">Ваш психологический код по дате рождения</h2>
+                  <div className="technique-text technique-text--birth-code">
+                    <h3 className="birth-code-section-title">🔹 Ваш базовый профиль</h3>
+                    <p className="technique-body">
+                      <strong>Тип личности:</strong> {birthCodeReport.personalityType}
+                    </p>
+                    <p className="technique-body">
+                      <strong>Ключевая энергия:</strong> {birthCodeReport.keyEnergy}
+                    </p>
+
+                    <h3 className="birth-code-section-title">🔹 Как вы принимаете решения</h3>
+                    <p className="technique-body">{birthCodeReport.decisionPattern}</p>
+
+                    <h3 className="birth-code-section-title">🔹 Ваши сильные стороны</h3>
+                    <ul className="birth-code-list">
+                      {birthCodeReport.strengths.map((item, i) => (
+                        <li key={i}>{item}</li>
+                      ))}
+                    </ul>
+
+                    <h3 className="birth-code-section-title">🔹 Внутренние конфликты / ограничения</h3>
+                    <ul className="birth-code-list">
+                      {birthCodeReport.conflicts.map((item, i) => (
+                        <li key={i}>{item}</li>
+                      ))}
+                    </ul>
+
+                    <h3 className="birth-code-section-title">🔹 На что вам сейчас обратить внимание</h3>
+                    <p className="technique-body">{birthCodeReport.focusNow}</p>
+                  </div>
+                  <button
+                    type="button"
+                    className="spin-button"
+                    onClick={() => {
+                      const reportText = `Хочу обсудить мой психологический код по дате рождения.\n\nТип личности: ${birthCodeReport.personalityType}\nКлючевая энергия: ${birthCodeReport.keyEnergy}\n\nКак я принимаю решения: ${birthCodeReport.decisionPattern}\n\nСильные стороны:\n- ${birthCodeReport.strengths.join("\n- ")}\n\nОграничения:\n- ${birthCodeReport.conflicts.join("\n- ")}\n\nФокус сейчас: ${birthCodeReport.focusNow}`;
+
+                      setBirthCodeReport(null);
+                      setShowBirthCodeIntro(false);
+                      setShowBirthCodeLoading(false);
+                      setShowDialogScreen(true);
+                      setShowTechniquesList(false);
+                      setShowCardDecodeScreen(false);
+                      setShowCardDayScreen(false);
+                      setDialogFromReview(false);
+                      setDialogAllowImage(false);
+                      setDialogImageDataUrl(null);
+                      setDialogMessages([
+                        {
+                          from: "user",
+                          text: reportText,
+                        },
+                      ]);
+                      setDialogError(null);
+                      setDialogInput("");
+                      setDialogLoading(false);
+                    }}
+                  >
+                    🤖 Обсудить результат с ИИ психологом
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => {
+                      setBirthCodeReport(null);
+                    }}
+                  >
+                    ⬅️ Назад к режимам работы
+                  </button>
+                </>
               ) : showDialogScreen ? (
                 <>
                   <p className="onboarding-subtitle">
                     Напишите, о чём хотите поговорить, и ИИ‑Психолог ответит вам в этом окне.
                   </p>
-                  <div className="dialog-history">
+                  {dialogAllowImage && <p className="onboarding-subtitle">Можно прикрепить фото для разбора.</p>}
+                  <div className="dialog-history" ref={dialogHistoryRef}>
                     {dialogMessages.map((m, idx) => (
                       <div
                         key={idx}
@@ -995,6 +1450,7 @@ export default function App() {
                               role: m.from === "user" ? "user" : "assistant",
                               content: m.text,
                             })),
+                            imageDataUrl: dialogImageDataUrl,
                           }),
                         });
                         if (!res.ok) {
@@ -1008,9 +1464,38 @@ export default function App() {
                         setDialogError("Произошла ошибка сети. Попробуйте ещё раз.");
                       } finally {
                         setDialogLoading(false);
+                        setDialogImageDataUrl(null);
                       }
                     }}
                   >
+                    {dialogAllowImage && (
+                      <div className="dialog-attachments">
+                        <label className="dialog-attach-button">
+                          📷 Прикрепить фото
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="dialog-attach-input"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) {
+                                setDialogImageDataUrl(null);
+                                return;
+                              }
+                              const reader = new FileReader();
+                              reader.onloadend = () => {
+                                const result = reader.result;
+                                if (typeof result === "string") {
+                                  setDialogImageDataUrl(result);
+                                }
+                              };
+                              reader.readAsDataURL(file);
+                            }}
+                          />
+                        </label>
+                        {dialogImageDataUrl && <span className="dialog-attach-hint">Фото прикреплено</span>}
+                      </div>
+                    )}
                     <textarea
                       className="dialog-input"
                       placeholder="Напишите свой вопрос или опишите ситуацию…"
@@ -1144,20 +1629,42 @@ export default function App() {
                       type="button"
                       className="main-menu-item"
                       onClick={() => {
-                        // Открываем диалог о раскладе по дате рождения.
-                        setShowAiCoachScreen(false);
-                        setShowCompass(true);
-                        setShowMainMenuScreen(false);
-                        setShowCabinetMenuScreen(false);
-                        setActiveTab("daily");
-                        setShowBirthSpreadModal(true);
+                        setShowBirthCodeIntro(true);
+                        setShowBirthCodeLoading(false);
+                        setBirthCodeReport(null);
+                        setShowDialogScreen(false);
+                        setShowCardDecodeScreen(false);
+                        setShowCardDayScreen(false);
+                        setShowTechniquesList(false);
                       }}
                     >
-                      Получить расклад по дате рождения
+                      Ваш психологический код по дате рождения
                     </button>
                   </div>
                 </>
               )}
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => {
+                  // Глобальная кнопка «Назад» из цифрового психолога в главное меню.
+                  setShowAiCoachScreen(false);
+                  setShowMainMenuScreen(true);
+                  setShowCompass(false);
+                  setShowCabinetMenuScreen(false);
+                  setShowDialogScreen(false);
+                  setShowCardDecodeScreen(false);
+                  setShowCardDayScreen(false);
+                  setShowBirthCodeIntro(false);
+                  setShowBirthCodeLoading(false);
+                  setBirthCodeReport(null);
+                  setShowTechniquesList(false);
+                  setSelectedTechniqueId(null);
+                  setActiveTab("menu");
+                }}
+              >
+                ⬅️ Назад в главное меню
+              </button>
             </section>
           </div>
           <nav className="bottom-nav">
@@ -1169,6 +1676,9 @@ export default function App() {
                 setShowCompass(true);
                 setShowMainMenuScreen(false);
                 setShowCabinetMenuScreen(false);
+                setShowBirthCodeIntro(false);
+                setShowBirthCodeLoading(false);
+                setBirthCodeReport(null);
                 setActiveTab("daily");
               }}
             >
@@ -1182,6 +1692,9 @@ export default function App() {
                 setShowMainMenuScreen(true);
                 setShowCabinetMenuScreen(false);
                 setShowCompass(false);
+                setShowBirthCodeIntro(false);
+                setShowBirthCodeLoading(false);
+                setBirthCodeReport(null);
                 setActiveTab("menu");
               }}
             >
@@ -1195,6 +1708,9 @@ export default function App() {
                 setShowCabinetMenuScreen(true);
                 setShowMainMenuScreen(false);
                 setShowCompass(false);
+                setShowBirthCodeIntro(false);
+                setShowBirthCodeLoading(false);
+                setBirthCodeReport(null);
                 setActiveTab("cabinet");
               }}
             >
@@ -1249,6 +1765,7 @@ export default function App() {
           setDialogError(null);
           setDialogInput("");
           setDialogLoading(false);
+          setDialogAllowImage(true);
         }}
         activeTab={activeTab}
       />
@@ -1272,6 +1789,7 @@ export default function App() {
         myData={cabinetProfile}
         myDataLoading={cabinetProfileLoading}
         myDataError={cabinetProfileError}
+        onSaveMyData={handleSaveCabinetProfile}
         onOpenMyReviews={() => {
           setShowCabinetMenuScreen(false);
           setShowMyReviewsScreen(true);
