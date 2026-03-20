@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { expandViewport, requestFullscreen } from "@telegram-apps/sdk";
 import MainMenuScreen from "./screens/MainMenuScreen";
 import CabinetMenuScreen from "./screens/CabinetMenuScreen";
@@ -105,6 +105,12 @@ type Profile = {
   birthDate: string;
 };
 
+type LearningSurvey = {
+  level: "novice" | "experienced";
+  goal: "self" | "answers" | "practice";
+  format: "cards" | "numbers" | "both";
+};
+
 type BirthCodeReport = {
   personalityType: string;
   keyEnergy: string;
@@ -113,6 +119,9 @@ type BirthCodeReport = {
   conflicts: string[];
   focusNow: string;
 };
+
+type AppScreen = "daily" | "menu" | "cabinet" | "aiCoach" | "reviews";
+type DialogOrigin = "none" | "technique" | "cardDecode" | "cardDay" | "birthCode" | "review";
 
 const STORAGE_KEY_PROFILE = "garmonia_compass_profile_v1";
 
@@ -215,6 +224,8 @@ const TECHNIQUES = [
 8. Запишите выводы и шаги, которые готовы предпринять.`,
   },
 ];
+
+const TECHNIQUE_DONE_TOKEN = "[[TECHNIQUE_DONE]]";
 
 function hashStringToIndex(input: string, modulo: number): number {
   let hash = 0;
@@ -369,9 +380,17 @@ export default function App() {
   const [dialogImageDataUrl, setDialogImageDataUrl] = useState<string | null>(null);
   const [dialogAllowImage, setDialogAllowImage] = useState(true);
   const [showDialogScreen, setShowDialogScreen] = useState(false);
+  const [showTechniqueDialogMenu, setShowTechniqueDialogMenu] = useState(false);
+  const [dialogScenario, setDialogScenario] = useState<"analyze" | "run" | "ask" | null>(null);
+  const [showProceedTechniqueNow, setShowProceedTechniqueNow] = useState(false);
+  const [isTechniqueRunFinished, setIsTechniqueRunFinished] = useState(false);
+  const [showAskNextOptions, setShowAskNextOptions] = useState(false);
+  const [learningSurvey, setLearningSurvey] = useState<LearningSurvey | null>(null);
+  const [dialogOrigin, setDialogOrigin] = useState<DialogOrigin>("none");
+  const [navigationStack, setNavigationStack] = useState<AppScreen[]>(["daily"]);
   const [showCardDecodeScreen, setShowCardDecodeScreen] = useState(false);
   const [showCardDayScreen, setShowCardDayScreen] = useState(false);
-  const [cardDay, setCardDay] = useState<{ title: string; description: string; imagePath?: string } | null>(null);
+  const [cardDay, setCardDay] = useState<{ title: string; description: string; imagePath?: string; dayMessage?: string | null } | null>(null);
   const [cardDayLoading, setCardDayLoading] = useState(false);
   const [cardDayError, setCardDayError] = useState<string | null>(null);
   const [cardDayChosenToday, setCardDayChosenToday] = useState(false);
@@ -388,6 +407,134 @@ export default function App() {
   const [showBirthCodeLoading, setShowBirthCodeLoading] = useState(false);
   const [birthCodeReport, setBirthCodeReport] = useState<BirthCodeReport | null>(null);
   const dialogHistoryRef = useRef<HTMLDivElement | null>(null);
+  const [isDialogInputFocused, setIsDialogInputFocused] = useState(false);
+  const [clearDialogInputOnFocus, setClearDialogInputOnFocus] = useState(false);
+
+  const selectedTechniqueForDialog =
+    selectedTechniqueId != null ? TECHNIQUES.find((t) => t.id === selectedTechniqueId) ?? null : null;
+
+  const activateScreen = (screen: AppScreen) => {
+    setShowMainMenuScreen(screen === "menu");
+    setShowCabinetMenuScreen(screen === "cabinet");
+    setShowAiCoachScreen(screen === "aiCoach");
+    setShowMyReviewsScreen(screen === "reviews");
+    setShowCompass(screen === "daily");
+    setActiveTab(screen === "menu" ? "menu" : screen === "cabinet" || screen === "reviews" ? "cabinet" : "daily");
+  };
+
+  const pushScreen = (screen: AppScreen) => {
+    setNavigationStack((prev) => [...prev, screen]);
+    activateScreen(screen);
+  };
+
+  const resetToMainMenu = () => {
+    setNavigationStack(["menu"]);
+    activateScreen("menu");
+    setShowDialogScreen(false);
+    setShowCardDecodeScreen(false);
+    setShowCardDayScreen(false);
+    setShowBirthCodeIntro(false);
+    setShowBirthCodeLoading(false);
+    setBirthCodeReport(null);
+    setShowTechniquesList(false);
+    setSelectedTechniqueId(null);
+    setShowTechniqueDialogMenu(false);
+    setDialogFromReview(false);
+    setDialogOrigin("none");
+  };
+
+  const goBack = () => {
+    setNavigationStack((prev) => {
+      if (prev.length <= 1) return prev;
+      const next = prev.slice(0, -1);
+      activateScreen(next[next.length - 1]);
+      return next;
+    });
+  };
+
+  const handleAiCoachBack = () => {
+    if (showDialogScreen) {
+      setShowDialogScreen(false);
+      setShowTechniqueDialogMenu(false);
+      setShowAskNextOptions(false);
+      setShowProceedTechniqueNow(false);
+      setDialogScenario(null);
+      setDialogLoading(false);
+      setDialogError(null);
+      setDialogImageDataUrl(null);
+      if (dialogOrigin === "review" || dialogFromReview) {
+        setDialogFromReview(false);
+        setDialogOrigin("none");
+        goBack();
+        return;
+      }
+      if (dialogOrigin === "cardDay") {
+        setShowCardDayScreen(true);
+      } else if (dialogOrigin === "cardDecode") {
+        setShowCardDecodeScreen(true);
+      } else if (dialogOrigin === "birthCode") {
+        setBirthCodeReport(null);
+        setShowBirthCodeIntro(true);
+      } else {
+        setShowTechniquesList(true);
+      }
+      setDialogOrigin("none");
+      return;
+    }
+    if (selectedTechniqueId != null) {
+      setSelectedTechniqueId(null);
+      return;
+    }
+    if (showTechniquesList) {
+      setShowTechniquesList(false);
+      return;
+    }
+    if (showCardDecodeScreen) {
+      setShowCardDecodeScreen(false);
+      return;
+    }
+    if (showCardDayScreen) {
+      setShowCardDayScreen(false);
+      return;
+    }
+    if (birthCodeReport) {
+      setBirthCodeReport(null);
+      return;
+    }
+    if (showBirthCodeLoading) {
+      setShowBirthCodeLoading(false);
+      setShowBirthCodeIntro(true);
+      return;
+    }
+    if (showBirthCodeIntro) {
+      setShowBirthCodeIntro(false);
+      return;
+    }
+    goBack();
+  };
+
+  const renderDialogText = (text: string) => {
+    // Сохраняем переносы строк и визуально выделяем "Шаг N".
+    const lines = text.split(/\n/);
+    return lines.map((line, idx) => {
+      const tokens = line.split(/(Шаг\s*\d+)/g);
+      return (
+        <Fragment key={`${idx}-${line}`}>
+          {tokens.map((t, i) => {
+            const isStepToken = /^Шаг\s*\d+$/u.test(t.trim());
+            return isStepToken ? (
+              <span key={i} className="dialog-technique-step">
+                {t}
+              </span>
+            ) : (
+              <Fragment key={i}>{t}</Fragment>
+            );
+          })}
+          {idx < lines.length - 1 ? <br /> : null}
+        </Fragment>
+      );
+    });
+  };
 
   const [initialScreen] = useState(() => {
     try {
@@ -470,7 +617,13 @@ export default function App() {
             return;
           }
 
-          const data = (await res.json()) as { fullName: string; birthDate: string };
+          const data = (await res.json()) as {
+            fullName: string;
+            birthDate: string;
+            learningLevel?: string;
+            learningGoal?: string;
+            learningFormat?: string;
+          };
           if (!data.fullName || !data.birthDate) return;
 
           const parsed: Profile = {
@@ -479,8 +632,15 @@ export default function App() {
           };
           setProfile(parsed);
           setProfileForm(parsed);
-          setShowMainMenuScreen(true);
-          setActiveTab("menu");
+          if (data.learningLevel && data.learningGoal && data.learningFormat) {
+            setLearningSurvey({
+              level: data.learningLevel as LearningSurvey["level"],
+              goal: data.learningGoal as LearningSurvey["goal"],
+              format: data.learningFormat as LearningSurvey["format"],
+            });
+          }
+          setNavigationStack(["menu"]);
+          activateScreen("menu");
           try {
             window.localStorage.setItem(STORAGE_KEY_PROFILE, JSON.stringify(parsed));
           } catch {
@@ -501,8 +661,8 @@ export default function App() {
       if (!parsed.fullName || !parsed.birthDate) return;
       setProfile(parsed);
       setProfileForm(parsed);
-      setShowMainMenuScreen(true);
-      setActiveTab("menu");
+      setNavigationStack(["menu"]);
+      activateScreen("menu");
     } catch {
       // ignore
     }
@@ -512,9 +672,8 @@ export default function App() {
   // сразу показываем главное меню внутри мини‑приложения.
   useEffect(() => {
     if (profile && initialScreen === "main_menu") {
-      setShowMainMenuScreen(true);
-      setActiveTab("menu");
-      setShowCompass(false);
+      setNavigationStack(["menu"]);
+      activateScreen("menu");
     }
   }, [profile, initialScreen]);
 
@@ -525,12 +684,33 @@ export default function App() {
     const el = dialogHistoryRef.current;
     if (!el) return;
     requestAnimationFrame(() => {
-      el.scrollTo({
-        top: el.scrollHeight,
-        behavior: "smooth",
-      });
+      const lastIdx = dialogMessages.length - 1;
+      const last = dialogMessages[lastIdx];
+      // Прокручиваем к началу ответа ИИ, чтобы пользователь видел первые строки.
+      if (last && last.from === "ai") {
+        const lastEl = el.querySelector(`[data-msg-index="${lastIdx}"]`) as HTMLElement | null;
+        if (lastEl) {
+          el.scrollTo({ top: lastEl.offsetTop, behavior: "smooth" });
+        } else {
+          el.scrollTo({ top: 0, behavior: "smooth" });
+        }
+      }
     });
-  }, [dialogMessages, dialogLoading, showDialogScreen]);
+  }, [dialogMessages, showDialogScreen]);
+
+  // В момент ввода текста (появляется клавиатура) фиксированное `bottom-nav` может "вылезать" поверх инпута.
+  // Скрываем меню только пока фокус на `textarea.dialog-input`.
+  useEffect(() => {
+    if (!showDialogScreen) {
+      setIsDialogInputFocused(false);
+      setShowTechniqueDialogMenu(false);
+      setDialogScenario(null);
+      setShowProceedTechniqueNow(false);
+      setClearDialogInputOnFocus(false);
+      setIsTechniqueRunFinished(false);
+      setShowAskNextOptions(false);
+    }
+  }, [showDialogScreen]);
 
   // При наличии профиля запрашиваем "цифру дня" с бэкенда.
   // Если запрос недоступен (например, при локальной разработке без Telegram WebApp),
@@ -659,8 +839,8 @@ export default function App() {
       console.warn("Profile API request failed:", e);
     }
     setProfile(cleanProfile);
-    setShowMainMenuScreen(true);
-    setActiveTab("menu");
+    setNavigationStack(["menu"]);
+    activateScreen("menu");
     setIsProfileSubmitting(false);
   };
 
@@ -671,6 +851,7 @@ export default function App() {
       // ignore
     }
     setProfile(null);
+    setLearningSurvey(null);
     setProfileForm({
       fullName: "",
       birthDate: "",
@@ -819,9 +1000,11 @@ export default function App() {
       setDialogError(null);
       setDialogInput("");
       setDialogFromReview(true);
+      setDialogOrigin("review");
       setShowMyReviewsScreen(false);
-      setShowAiCoachScreen(true);
+      pushScreen("aiCoach");
       setShowDialogScreen(true);
+      setShowTechniqueDialogMenu(false);
       setShowTechniquesList(false);
       setShowCardDecodeScreen(false);
       setShowCardDayScreen(false);
@@ -919,6 +1102,122 @@ export default function App() {
     }
   };
 
+  const handleSaveLearningSurvey = async (payload: LearningSurvey): Promise<boolean> => {
+    if (!profile) return false;
+    const w = window as unknown as { Telegram?: { WebApp?: { initData?: string } } };
+    const initData = w.Telegram?.WebApp?.initData ?? "";
+    const apiBase = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
+    try {
+      const res = await fetch(`${apiBase}/api/profile`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          initData,
+          fullName: profile.fullName,
+          birthDate: profile.birthDate,
+          learningLevel: payload.level,
+          learningGoal: payload.goal,
+          learningFormat: payload.format,
+        }),
+      });
+      if (!res.ok) return false;
+      setLearningSurvey(payload);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const generateCardDayMessage = async (title: string, description: string, imagePath?: string): Promise<string> => {
+    const safeTitle = (title ?? "").trim();
+    const safeDescription = (description ?? "").trim();
+    if (!safeTitle && !safeDescription) return "";
+
+    const apiBase = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
+    const w = window as unknown as { Telegram?: { WebApp?: { initData?: string } } };
+    const initData = w.Telegram?.WebApp?.initData ?? "";
+
+    const prompt = `Ты создаёшь короткие авторские послания для раздела «Карта дня» в приложении про самопознание.
+
+На основе названия карты, её внешнего вида и смысла напиши короткое послание на день. Текст должен ощущаться как личный внутренний ориентир для человека на сегодня: тёплый, тонкий, поддерживающий и красивый по звучанию.
+
+Тон:
+- бережный
+- глубокий
+- спокойный
+- современный
+- без инфоцыганства
+- без банальных мотивационных клише
+- без мистики и предсказаний
+
+Смысл:
+- показать человеку главный фокус дня;
+- помочь почувствовать, что именно сегодня важно заметить, принять, отпустить или усилить;
+- дать мягкий внутренний импульс, а не готовый совет в лоб.
+
+Требования:
+- 2–4 предложения;
+- компактно;
+- без списков;
+- без заголовков;
+- без повторения текста карты почти дословно;
+- не использовать фразы «вам нужно», «сегодня вас ждёт», «карта говорит», «вселенная подсказывает»;
+- писать красиво, но понятно.
+
+Данные карты:
+Название: ${safeTitle || "—"}
+Смысл: ${safeDescription || "—"}
+
+Ответь только готовым посланием.`;
+
+    let imageDataUrl: string | null = null;
+    const rawImagePath = (imagePath ?? "").trim();
+    if (rawImagePath) {
+      try {
+        if (rawImagePath.startsWith("data:")) {
+          imageDataUrl = rawImagePath;
+        } else {
+          const absoluteImageURL = new URL(rawImagePath, window.location.href).toString();
+          const imageResp = await fetch(absoluteImageURL);
+          if (imageResp.ok) {
+            const blob = await imageResp.blob();
+            imageDataUrl = await new Promise<string>((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onloadend = () => {
+                if (typeof reader.result === "string") {
+                  resolve(reader.result);
+                } else {
+                  reject(new Error("failed to convert image blob to data url"));
+                }
+              };
+              reader.onerror = () => reject(reader.error ?? new Error("file reader error"));
+              reader.readAsDataURL(blob);
+            });
+          }
+        }
+      } catch {
+        imageDataUrl = null;
+      }
+    }
+
+    const res = await fetch(`${apiBase}/api/ai-dialog`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        initData,
+        message: prompt,
+        history: [],
+        imageDataUrl,
+      }),
+    });
+
+    if (!res.ok) {
+      throw new Error(await res.text());
+    }
+    const data = (await res.json()) as { reply: string };
+    return data.reply?.trim() ?? "";
+  };
+
   const openCardDayDialogWithAi = async () => {
     if (!cardDay) return;
 
@@ -932,9 +1231,11 @@ export default function App() {
 
     setShowCardDayScreen(false);
     setShowDialogScreen(true);
+    setShowTechniqueDialogMenu(false);
     setShowTechniquesList(false);
     setShowCardDecodeScreen(false);
     setDialogFromReview(false);
+    setDialogOrigin("cardDay");
     setDialogAllowImage(false);
     setDialogMessages([{ from: "user", text: userMessage }]);
     setDialogInput("");
@@ -1100,15 +1401,12 @@ export default function App() {
                           // Переходим в диалог с ИИ‑психологом и передаём туда выбранную технику.
                           setShowTechniquesList(false);
                           setShowDialogScreen(true);
+                          setShowTechniqueDialogMenu(true);
                           setShowCardDecodeScreen(false);
                           setShowCardDayScreen(false);
+                          setDialogOrigin("technique");
                           setDialogAllowImage(false);
-                          setDialogMessages([
-                            {
-                              from: "user",
-                              text: `Хочу разобрать технику с ИИ‑психологом.\n\n${selectedTechnique.title}\n\n${selectedTechnique.text}`,
-                            },
-                          ]);
+                          setDialogMessages([]);
                           setDialogError(null);
                           setDialogInput("");
                           setDialogLoading(false);
@@ -1132,7 +1430,10 @@ export default function App() {
                       }
                     }}
                   >
-                    {selectedTechnique ? "⬅️ Назад к техникам" : "⬅️ Назад к режимам работы"}
+                    {selectedTechnique ? "Назад" : "Назад"}
+                  </button>
+                  <button type="button" className="secondary-button" onClick={resetToMainMenu}>
+                    Главное меню
                   </button>
                 </>
               ) : showCardDecodeScreen ? (
@@ -1155,6 +1456,8 @@ export default function App() {
                     onClick={() => {
                       setShowCardDecodeScreen(false);
                       setShowDialogScreen(true);
+                      setShowTechniqueDialogMenu(false);
+                      setDialogOrigin("cardDecode");
                       setDialogMessages([
                         {
                           from: "user",
@@ -1175,7 +1478,10 @@ export default function App() {
                       setShowCardDecodeScreen(false);
                     }}
                   >
-                    ⬅️ Назад к режимам работы
+                    Назад
+                  </button>
+                  <button type="button" className="secondary-button" onClick={resetToMainMenu}>
+                    Главное меню
                   </button>
                 </>
               ) : showCardDayScreen ? (
@@ -1219,10 +1525,19 @@ export default function App() {
                                     return;
                                   }
                                   const data = (await res.json()) as { title: string; description: string; image_path?: string };
+                                  let dayMessage: string | null = null;
+                                  try {
+                                    const generated = await generateCardDayMessage(data.title, data.description, data.image_path);
+                                    dayMessage = generated || null;
+                                  } catch {
+                                    // Если генерация послания временно недоступна, покажем базовый смысл карты.
+                                    dayMessage = null;
+                                  }
                                   setCardDay({
                                     title: data.title,
                                     description: data.description,
                                     imagePath: data.image_path,
+                                    dayMessage,
                                   });
                                   setCardDayChosenToday(true);
                                   try {
@@ -1250,18 +1565,23 @@ export default function App() {
                         <p className="technique-body">
                           Ваша карта дня на сегодня. Следующая карта станет доступна после 00:00 по московскому времени.
                         </p>
+                        {cardDay.dayMessage && (
+                          <p className="technique-body">
+                            {cardDay.dayMessage}
+                          </p>
+                        )}
                         {cardDay.imagePath && (
                           <div className="card-day-image-wrapper">
                             <img src={cardDay.imagePath} alt={cardDay.title || "Карта дня"} className="card-day-image" />
                           </div>
                         )}
                         {cardDay.title && <h2 className="technique-title">{cardDay.title}</h2>}
-                        {cardDay.description && (
+                        {!cardDay.dayMessage && cardDay.description && (
                           <p className="technique-body">
                             {cardDay.description || "Описание карты пока не задано, но вы можете прислушаться к своим ассоциациям."}
                           </p>
                         )}
-                        {!cardDay.description && (
+                        {!cardDay.dayMessage && !cardDay.description && (
                           <p className="technique-body">
                             {`Посмотрите на свою карту и отметьте:\n• какие детали привлекают внимание;\n• какие чувства и мысли появляются;\n• с какими ситуациями в вашей жизни это перекликается.`}
                           </p>
@@ -1285,7 +1605,10 @@ export default function App() {
                       setShowCardDayScreen(false);
                     }}
                   >
-                    ⬅️ Назад к режимам работы
+                    Назад
+                  </button>
+                  <button type="button" className="secondary-button" onClick={resetToMainMenu}>
+                    Главное меню
                   </button>
                 </>
               ) : showBirthCodeIntro ? (
@@ -1318,7 +1641,10 @@ export default function App() {
                       setShowBirthCodeIntro(false);
                     }}
                   >
-                    ⬅️ Назад к режимам работы
+                    Назад
+                  </button>
+                  <button type="button" className="secondary-button" onClick={resetToMainMenu}>
+                    Главное меню
                   </button>
                 </>
               ) : showBirthCodeLoading ? (
@@ -1372,10 +1698,12 @@ export default function App() {
                       setShowBirthCodeIntro(false);
                       setShowBirthCodeLoading(false);
                       setShowDialogScreen(true);
+                      setShowTechniqueDialogMenu(false);
                       setShowTechniquesList(false);
                       setShowCardDecodeScreen(false);
                       setShowCardDayScreen(false);
                       setDialogFromReview(false);
+                      setDialogOrigin("birthCode");
                       setDialogAllowImage(false);
                       setDialogImageDataUrl(null);
                       setDialogMessages([
@@ -1398,147 +1726,554 @@ export default function App() {
                       setBirthCodeReport(null);
                     }}
                   >
-                    ⬅️ Назад к режимам работы
+                    Назад
+                  </button>
+                  <button type="button" className="secondary-button" onClick={resetToMainMenu}>
+                    Главное меню
                   </button>
                 </>
               ) : showDialogScreen ? (
                 <>
-                  <p className="onboarding-subtitle">
-                    Напишите, о чём хотите поговорить, и ИИ‑Психолог ответит вам в этом окне.
-                  </p>
-                  {dialogAllowImage && <p className="onboarding-subtitle">Можно прикрепить фото для разбора.</p>}
-                  <div className="dialog-history" ref={dialogHistoryRef}>
-                    {dialogMessages.map((m, idx) => (
-                      <div
-                        key={idx}
-                        className={m.from === "user" ? "dialog-bubble dialog-bubble-user" : "dialog-bubble dialog-bubble-ai"}
-                      >
-                        {m.text}
-                      </div>
-                    ))}
-                    {dialogLoading && <div className="dialog-bubble dialog-bubble-ai">Психолог набирает ответ…</div>}
-                  </div>
-                  {dialogError && <p className="dialog-error">{dialogError}</p>}
-                  <form
-                    className="dialog-form"
-                    onSubmit={async (e) => {
-                      e.preventDefault();
-                      const text = dialogInput.trim();
-                      if (!text || dialogLoading) return;
-                      setDialogError(null);
-                      setDialogLoading(true);
-                      // Формируем историю для отправки на бэкенд:
-                      // предыдущие сообщения + текущее пользовательское.
-                      const historyForRequest = [
-                        ...dialogMessages,
-                        { from: "user" as const, text },
-                      ];
-                      setDialogMessages((prev) => [...prev, { from: "user", text }]);
-                      setDialogInput("");
+                  {showTechniqueDialogMenu ? (
+                    <>
+                      <p className="onboarding-subtitle">что ты хочешь сделать?</p>
+                      <div className="main-menu-list" style={{ marginTop: "0.85rem" }}>
+                        <button
+                          type="button"
+                          className="main-menu-item"
+                          onClick={() => {
+                            setShowTechniqueDialogMenu(false);
+                            setDialogScenario("analyze");
+                            setShowProceedTechniqueNow(false);
+                            setDialogMessages([]);
+                            setDialogError(null);
+                            setDialogLoading(false);
+                            setDialogImageDataUrl(null);
+                            setDialogAllowImage(false);
+                            const title = selectedTechniqueForDialog?.title ?? "выбранную технику";
+                            setDialogInput(
+                              "Давайте разберём эту технику под вашу ситуацию. Что сейчас у вас откликается или вызывает напряжение?"
+                            );
+                            setClearDialogInputOnFocus(true);
+                            setShowAskNextOptions(false);
+                          }}
+                        >
+                          разобрать технику
+                        </button>
+                        <button
+                          type="button"
+                          className="main-menu-item"
+                          onClick={() => {
+                            setShowTechniqueDialogMenu(false);
+                            setDialogScenario("run");
+                            setShowProceedTechniqueNow(false);
+                            setIsTechniqueRunFinished(false);
+                            setDialogMessages([]);
+                            setDialogError(null);
+                            setDialogLoading(false);
+                            setDialogImageDataUrl(null);
+                            setDialogAllowImage(false);
+                            setDialogInput("");
+                            setIsDialogInputFocused(false);
+                            const title = selectedTechniqueForDialog?.title ?? "выбранную технику";
+                            setShowAskNextOptions(false);
+                            // Стартуем технику сразу, чтобы экран не был пустым.
+                            void (async () => {
+                              setDialogLoading(true);
+                              setDialogError(null);
+                              try {
+                                const apiBase = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
+                                const w = window as unknown as { Telegram?: { WebApp?: { initData?: string } } };
+                                const initData = w.Telegram?.WebApp?.initData ?? "";
+                                const techniqueText = selectedTechniqueForDialog?.text ?? "";
+                                const requestMessage = `Ты — ИИ‑психолог‑коуч. Твоя задача — провести пользователя через психологическую технику пошагово (шаг → вопрос → ответ → следующий шаг).
 
-                      try {
-                        const apiBase = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
-                        const w = window as unknown as { Telegram?: { WebApp?: { initData?: string } } };
-                        const initData = w.Telegram?.WebApp?.initData ?? "";
-                        const res = await fetch(`${apiBase}/api/ai-dialog`, {
-                          method: "POST",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({
-                            initData,
-                            message: text,
-                            history: historyForRequest.map((m) => ({
-                              role: m.from === "user" ? "user" : "assistant",
-                              content: m.text,
-                            })),
-                            imageDataUrl: dialogImageDataUrl,
-                          }),
-                        });
-                        if (!res.ok) {
-                          const msg = await res.text();
-                          setDialogError(msg || "Не удалось получить ответ. Попробуйте ещё раз позже.");
-                        } else {
-                          const data = (await res.json()) as { reply: string };
-                          setDialogMessages((prev) => [...prev, { from: "ai", text: data.reply }]);
-                        }
-                      } catch {
-                        setDialogError("Произошла ошибка сети. Попробуйте ещё раз.");
-                      } finally {
-                        setDialogLoading(false);
-                        setDialogImageDataUrl(null);
-                      }
-                    }}
-                  >
-                    {dialogAllowImage && (
-                      <div className="dialog-attachments">
-                        <label className="dialog-attach-button">
-                          📷 Прикрепить фото
-                          <input
-                            type="file"
-                            accept="image/*"
-                            className="dialog-attach-input"
-                            onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              if (!file) {
-                                setDialogImageDataUrl(null);
-                                return;
-                              }
-                              const reader = new FileReader();
-                              reader.onloadend = () => {
-                                const result = reader.result;
-                                if (typeof result === "string") {
-                                  setDialogImageDataUrl(result);
+Техника: ${title}
+Текст техники: ${techniqueText}
+
+Правила:
+1) НЕ выдавай всю технику сразу.
+2) В каждом сообщении давай только ОДИН следующий шаг + один конкретный вопрос.
+3) Адаптируй формулировку шага под то, что пользователь ответит (используй историю).
+4) Говори мягко и поддерживающе, помогай осознавать чувства/мысли.
+5) НЕ делай огромных текстов.
+6) В конце, когда техника будет полностью завершена, добавь маркер в последней строке: ${TECHNIQUE_DONE_TOKEN}
+
+Начни сейчас:
+Короткое введение (1–2 предложения).
+Потом: "Начнём." + (переформулированный) Шаг 1.
+Затем один вопрос пользователю:
+Что вы сейчас видите/чувствуете/выбираете?`;
+                                const res = await fetch(`${apiBase}/api/ai-dialog`, {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({
+                                    initData,
+                                    message: requestMessage,
+                                    history: [],
+                                    imageDataUrl: null,
+                                  }),
+                                });
+                                if (!res.ok) {
+                                  const msg = await res.text();
+                                  setDialogError(msg || "Не удалось запустить технику.");
+                                } else {
+                                  const data = (await res.json()) as { reply: string };
+                                  const rawReply = data.reply ?? "";
+                                  const cleanedReply = rawReply.replace(TECHNIQUE_DONE_TOKEN, "").trim();
+                                  setDialogMessages([{ from: "ai", text: cleanedReply }]);
+                                  setDialogError(null);
+                                  if (rawReply.includes(TECHNIQUE_DONE_TOKEN)) {
+                                    setIsTechniqueRunFinished(true);
+                                  }
                                 }
-                              };
-                              reader.readAsDataURL(file);
-                            }}
-                          />
-                        </label>
-                        {dialogImageDataUrl && <span className="dialog-attach-hint">Фото прикреплено</span>}
+                              } catch {
+                                setDialogError("Произошла ошибка сети. Попробуйте ещё раз.");
+                              } finally {
+                                setDialogLoading(false);
+                              }
+                            })();
+                          }}
+                        >
+                          пройти технику
+                        </button>
+                        <button
+                          type="button"
+                          className="main-menu-item"
+                          onClick={() => {
+                            setShowTechniqueDialogMenu(false);
+                            setDialogScenario("ask");
+                            setShowProceedTechniqueNow(false);
+                            setDialogMessages([]);
+                            setDialogError(null);
+                            setDialogLoading(false);
+                            setDialogImageDataUrl(null);
+                            setDialogAllowImage(true);
+                            const title = selectedTechniqueForDialog?.title ?? "выбранную технику";
+                            setDialogInput("Задайте любой вопрос по этой технике или вашему состоянию — я помогу разобраться.");
+                            setClearDialogInputOnFocus(true);
+                            setShowAskNextOptions(false);
+                          }}
+                        >
+                          задать вопрос
+                        </button>
                       </div>
-                    )}
-                    <textarea
-                      className="dialog-input"
-                      placeholder="Напишите свой вопрос или опишите ситуацию…"
-                      rows={3}
-                      value={dialogInput}
-                      onChange={(e) => setDialogInput(e.target.value)}
-                    />
-                    <button type="submit" className="spin-button" disabled={dialogLoading || !dialogInput.trim()}>
-                      {dialogLoading ? "Отправляем..." : "Отправить"}
-                    </button>
-                  </form>
-                  <p className="onboarding-subtitle">
-                    Чтобы сохранить этот разбор и увидеть его позже в разделе «Мои разборы», в конце нажмите кнопку
-                    «Завершить диалог».
-                  </p>
-                  <button
-                    type="button"
-                    className="secondary-button"
-                    onClick={async () => {
-                      await handleSaveDialog("dialog");
-                      setShowDialogScreen(false);
-                      setDialogMessages([]);
-                      setDialogError(null);
-                      setDialogInput("");
-                      setDialogLoading(false);
-                    }}
-                  >
-                    🛑 Завершить диалог
-                  </button>
-                  {dialogFromReview && (
-                    <button
-                      type="button"
-                      className="secondary-button"
-                      onClick={() => {
-                        // Закрываем диалог и возвращаемся на экран "Мои разборы".
-                        setShowDialogScreen(false);
-                        setDialogFromReview(false);
-                        setShowAiCoachScreen(false);
-                        setShowMyReviewsScreen(true);
-                      }}
-                    >
-                      ⬅️ Назад к списку разборов
-                    </button>
+                    </>
+                  ) : (
+                    <>
+                      <p className="onboarding-subtitle">
+                        {dialogScenario === "analyze"
+                          ? "Давайте разберём эту технику под вашу ситуацию — что сейчас у вас откликается или вызывает напряжение?"
+                          : dialogScenario === "run"
+                            ? "Сейчас проведём технику. Напишите результат выполнения Шага 1 или ваш ответ."
+                            : dialogScenario === "ask"
+                              ? "Сформулируйте ваш вопрос по выбранной технике — и мы разберём его."
+                              : "Напишите, о чём хотите поговорить, и ИИ‑Психолог ответит вам в этом окне."}
+                      </p>
+                      {dialogAllowImage && (
+                        <p className="onboarding-subtitle">Можно прикрепить фото для разбора.</p>
+                      )}
+                      {(dialogMessages.length > 0 || dialogLoading) && (
+                        <div className="dialog-history" ref={dialogHistoryRef}>
+                          {dialogMessages.map((m, idx) => (
+                            <div
+                              key={idx}
+                              className={m.from === "user" ? "dialog-bubble dialog-bubble-user" : "dialog-bubble dialog-bubble-ai"}
+                              data-msg-index={idx}
+                              data-msg-from={m.from}
+                            >
+                              {renderDialogText(m.text)}
+                            </div>
+                          ))}
+                          {dialogLoading && <div className="dialog-bubble dialog-bubble-ai">Психолог набирает ответ…</div>}
+                        </div>
+                      )}
+                      {dialogError && <p className="dialog-error">{dialogError}</p>}
+                        {showProceedTechniqueNow && dialogScenario === "analyze" && (
+                        <button
+                          type="button"
+                          className="secondary-button"
+                          disabled={dialogLoading}
+                          onClick={() => {
+                            // Запускаем технику после разбора.
+                            const uiUserText = "Пройти технику сейчас";
+                            setShowProceedTechniqueNow(false);
+                            setDialogScenario("run");
+                            setDialogAllowImage(false);
+                            setDialogInput("");
+                            setDialogError(null);
+                            setDialogLoading(true);
+                              setIsTechniqueRunFinished(false);
+
+                            void (async () => {
+                              try {
+                                const apiBase = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
+                                const w = window as unknown as { Telegram?: { WebApp?: { initData?: string } } };
+                                const initData = w.Telegram?.WebApp?.initData ?? "";
+                                const techniqueText = selectedTechniqueForDialog?.text ?? "";
+                                const techniqueTitle = selectedTechniqueForDialog?.title ?? "";
+
+                                const historyForRequest = [...dialogMessages, { from: "user" as const, text: uiUserText }];
+                                setDialogMessages((prev) => [...prev, { from: "user", text: uiUserText }]);
+
+                                const requestMessage = `Ты — ИИ‑психолог‑коуч. Веди пользователя через технику пошагово.\n\nТехника (контекст): ${techniqueTitle}\n${techniqueText}\n\nИстория пользователя и твои предыдущие ответы уже есть.\n\nВ ответе сейчас дай первый следующий шаг (ОДИН шаг) и конкретный вопрос, на который пользователь должен ответить.\n\nПравила:\n1) НЕ выдавай всю технику.\n2) Шаг -> вопрос -> жди ответ.\n3) Адаптируй под ответ пользователя.\n\nЕсли техника подошла к завершению — добавь в конец маркер: ${TECHNIQUE_DONE_TOKEN}\n\nВеди мягко и поддерживающе.`;
+                                const res = await fetch(`${apiBase}/api/ai-dialog`, {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({
+                                    initData,
+                                    message: requestMessage,
+                                    history: historyForRequest.map((m) => ({
+                                      role: m.from === "user" ? "user" : "assistant",
+                                      content: m.text,
+                                    })),
+                                    imageDataUrl: null,
+                                  }),
+                                });
+                                if (!res.ok) {
+                                  const msg = await res.text();
+                                  setDialogError(msg || "Не удалось запустить технику.");
+                                } else {
+                                  const data = (await res.json()) as { reply: string };
+                                const rawReply = data.reply ?? "";
+                                const cleanedReply = rawReply.replace(TECHNIQUE_DONE_TOKEN, "").trim();
+                                setDialogMessages((prev) => [...prev, { from: "ai", text: cleanedReply }]);
+                                  setDialogError(null);
+                                if (rawReply.includes(TECHNIQUE_DONE_TOKEN)) {
+                                  setIsTechniqueRunFinished(true);
+                                }
+                                }
+                              } catch {
+                                setDialogError("Произошла ошибка сети. Попробуйте ещё раз.");
+                              } finally {
+                                setDialogLoading(false);
+                              }
+                            })();
+                          }}
+                        >
+                          👉 Пройти технику сейчас
+                        </button>
+                      )}
+                      <form
+                        className="dialog-form"
+                        onSubmit={async (e) => {
+                          e.preventDefault();
+                          const text = dialogInput.trim();
+                          if (!text || dialogLoading) return;
+                          setDialogError(null);
+                          setDialogLoading(true);
+                          const techniqueTitle = selectedTechniqueForDialog?.title ?? "";
+                          const techniqueText = selectedTechniqueForDialog?.text ?? "";
+                          let requestMessage = text;
+                          if (dialogScenario && selectedTechniqueForDialog) {
+                            if (dialogScenario === "analyze") {
+                              requestMessage = `Ты ИИ‑Психолог.\nСценарий: "Разобрать технику под вашу ситуацию" (помочь понять, как техника работает именно для пользователя, ПРЕЖДЕ чем проходить её).
+\nТехника: ${techniqueTitle}
+Текст техники (используй как справку, не цитируй полностью):\n${techniqueText}
+\nСитуация пользователя:\n${text}
+
+Ответь структурно (коротко и по делу):
+1) Объясни смысл техники простым языком: что она делает и зачем.
+2) Покажи связь с состоянием пользователя: что именно в ситуации откликается/вызывает напряжение и как техника это адресует.
+3) Расшифруй каждый шаг: ЗАЧЕМ он, что даёт пользователю именно в этой ситуации.
+4) Задай 1–2 уточняющих вопроса (выбери подходящие):
+   - "В какой момент вы чаще всего сталкиваетесь с этим состоянием?"
+   - "Что именно внутри вас откликается на эту технику?"
+5) Подведи итог: "В вашем случае эта техника поможет…" (2–3 предложения).
+В конце просто одной строкой: "👉 Пройти технику сейчас" (без больших списков).`;
+                            } else if (dialogScenario === "run") {
+                              requestMessage = `Ты — ИИ‑психолог‑коуч. Твоя задача — вести пользователя через технику.\n\nТехника (контекст):\n${techniqueTitle}\n${techniqueText}\n\nСейчас пользователь ответил:\n${text}\n\nПравила:\n1) НЕ выдавай всю технику сразу.\n2) Выдавай только ОДИН следующий шаг + один конкретный вопрос.\n3) Шаг адаптируй под то, что пользователь написал, используя историю.\n4) После выполнения шага пользователь должен ответить.\n5) Говори мягко и поддерживающе.\n\nЕсли техника подошла к завершению, то в твоём ответе должна быть финальная поддержка + итог (коротко) + последний вопрос: "Что вы сейчас чувствуете? Что изменилось внутри?". В таком случае ДОПОЛНИТЕЛЬНО добавь в конец точный маркер: ${TECHNIQUE_DONE_TOKEN}`;
+                            } else if (dialogScenario === "ask") {
+                              requestMessage = `Ты — ИИ‑психолог‑коуч.\n\nСценарий: ответить на вопрос пользователя про эту технику или его состояние.\n\nТехника (контекст):\n${techniqueTitle}\n${techniqueText}\n\nВопрос/сообщение пользователя:\n${text}\n\nТвоя задача:\n1) Отвечай мягко и поддерживающе.\n2) Объясни просто и по-человечески: что это значит и как техника работает именно в такой ситуации.\n3) Упростить: убери лишнее, оставь суть.\n4) Направь: дай 1–3 практичных опоры/действия или мини-шаг.\n5) Если в вопросе есть неопределённость — задай ОДИН уточняющий вопрос.\n\nВ конце (очень коротко, без простыней) предложи следующий шаг из вариантов:\n- "Разобрать технику глубже"\n- "Пройти технику"\n- "В главное меню" (если уместно).`;
+                            }
+                          }
+                          // Формируем историю для отправки на бэкенд:
+                          // предыдущие сообщения + текущее пользовательское.
+                          const historyForRequest = [...dialogMessages, { from: "user" as const, text }];
+                          setDialogMessages((prev) => [...prev, { from: "user", text }]);
+                          setDialogInput("");
+
+                          try {
+                            const apiBase = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
+                            const w = window as unknown as { Telegram?: { WebApp?: { initData?: string } } };
+                            const initData = w.Telegram?.WebApp?.initData ?? "";
+                            const res = await fetch(`${apiBase}/api/ai-dialog`, {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({
+                                initData,
+                                message: requestMessage,
+                                history: historyForRequest.map((m) => ({
+                                  role: m.from === "user" ? "user" : "assistant",
+                                  content: m.text,
+                                })),
+                                imageDataUrl: dialogImageDataUrl,
+                              }),
+                            });
+                            if (!res.ok) {
+                              const msg = await res.text();
+                              setDialogError(msg || "Не удалось получить ответ. Попробуйте ещё раз позже.");
+                            } else {
+                              const data = (await res.json()) as { reply: string };
+                              const rawReply = data.reply ?? "";
+                              const cleanedReply = rawReply.replace(TECHNIQUE_DONE_TOKEN, "").trim();
+                              setDialogMessages((prev) => [...prev, { from: "ai", text: cleanedReply }]);
+                            if (dialogScenario === "analyze") setShowProceedTechniqueNow(true);
+                            if (dialogScenario === "ask") setShowAskNextOptions(true);
+                              if (dialogScenario === "run" && rawReply.includes(TECHNIQUE_DONE_TOKEN)) {
+                                setIsTechniqueRunFinished(true);
+                              }
+                            }
+                          } catch {
+                            setDialogError("Произошла ошибка сети. Попробуйте ещё раз.");
+                          } finally {
+                            setDialogLoading(false);
+                            setDialogImageDataUrl(null);
+                          }
+                        }}
+                      >
+                        {dialogAllowImage && (
+                          <div className="dialog-attachments">
+                            <label className="dialog-attach-button">
+                              📷 Прикрепить фото
+                              <input
+                                type="file"
+                                accept="image/*"
+                                className="dialog-attach-input"
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0];
+                                  if (!file) {
+                                    setDialogImageDataUrl(null);
+                                    return;
+                                  }
+                                  const reader = new FileReader();
+                                  reader.onloadend = () => {
+                                    const result = reader.result;
+                                    if (typeof result === "string") {
+                                      setDialogImageDataUrl(result);
+                                    }
+                                  };
+                                  reader.readAsDataURL(file);
+                                }}
+                              />
+                            </label>
+                            {dialogImageDataUrl && <span className="dialog-attach-hint">Фото прикреплено</span>}
+                          </div>
+                        )}
+                        {!((isTechniqueRunFinished && dialogScenario === "run") || (showAskNextOptions && dialogScenario === "ask")) && (
+                          <>
+                            <textarea
+                              className="dialog-input"
+                              placeholder={
+                                dialogScenario === "analyze"
+                                  ? "Что сейчас у вас откликается или вызывает напряжение?"
+                                  : dialogScenario === "run"
+                                    ? "Что получилось после выполнения Шага 1?"
+                                    : dialogScenario === "ask"
+                                      ? "Ваш вопрос (что именно хотите понять/прояснить)?"
+                                      : "Напишите свой вопрос или опишите ситуацию…"
+                              }
+                              rows={3}
+                              value={dialogInput}
+                              onChange={(e) => setDialogInput(e.target.value)}
+                              onFocus={() => {
+                                setIsDialogInputFocused(true);
+                                if (clearDialogInputOnFocus) {
+                                  setDialogInput("");
+                                  setClearDialogInputOnFocus(false);
+                                }
+                              }}
+                              onBlur={() => {
+                                setIsDialogInputFocused(false);
+                              }}
+                            />
+                            <button type="submit" className="spin-button" disabled={dialogLoading || !dialogInput.trim()}>
+                              {dialogLoading ? "Отправляем..." : "Отправить"}
+                            </button>
+                          </>
+                        )}
+                      </form>
+                      {showAskNextOptions && dialogScenario === "ask" ? (
+                        <div className="main-menu-list" style={{ marginTop: "1rem" }}>
+                          <button
+                            type="button"
+                            className="main-menu-item"
+                            onClick={() => {
+                              setShowAskNextOptions(false);
+                              setIsTechniqueRunFinished(false);
+                              setShowTechniqueDialogMenu(false);
+                              setDialogScenario("analyze");
+                              setShowProceedTechniqueNow(false);
+                              setDialogMessages([]);
+                              setDialogError(null);
+                              setDialogLoading(false);
+                              setDialogImageDataUrl(null);
+                              setDialogAllowImage(false);
+                              setDialogInput(
+                                "Давайте разберём эту технику под вашу ситуацию. Что сейчас у вас откликается или вызывает напряжение?"
+                              );
+                              setClearDialogInputOnFocus(true);
+                            }}
+                          >
+                            Разобрать технику глубже
+                          </button>
+                          <button
+                            type="button"
+                            className="main-menu-item"
+                            onClick={() => {
+                              setShowAskNextOptions(false);
+                              setIsTechniqueRunFinished(false);
+                              setShowTechniqueDialogMenu(false);
+                              setDialogScenario("run");
+                              setShowProceedTechniqueNow(false);
+                              setDialogMessages([]);
+                              setDialogError(null);
+                              setDialogLoading(false);
+                              setDialogImageDataUrl(null);
+                              setDialogAllowImage(false);
+                              setDialogInput("");
+
+                              void (async () => {
+                                try {
+                                  setDialogLoading(true);
+                                  const apiBase = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
+                                  const w = window as unknown as { Telegram?: { WebApp?: { initData?: string } } };
+                                  const initData = w.Telegram?.WebApp?.initData ?? "";
+                                  const title = selectedTechniqueForDialog?.title ?? "выбранная техника";
+                                  const techniqueText = selectedTechniqueForDialog?.text ?? "";
+                                  const requestMessage = `Ты — ИИ‑психолог‑коуч. Твоя задача — провести пользователя через психологическую технику пошагово.
+
+Техника: ${title}
+Текст техники (контекст): ${techniqueText}
+
+Правила:
+1) НЕ выдавай всю технику сразу.
+2) В каждом сообщении: ОДИН следующий шаг + один конкретный вопрос пользователю.
+3) Мягко поддерживай и веди к ответу.
+4) В конце завершения добавь маркер в последней строке: ${TECHNIQUE_DONE_TOKEN}
+
+Начни: короткое введение + "Начнём." + Шаг 1 (переформулированный) + вопрос: что вы сейчас видите/чувствуете/выбираете?`;
+
+                                  const res = await fetch(`${apiBase}/api/ai-dialog`, {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({
+                                      initData,
+                                      message: requestMessage,
+                                      history: [],
+                                      imageDataUrl: null,
+                                    }),
+                                  });
+
+                                  if (!res.ok) {
+                                    const msg = await res.text();
+                                    setDialogError(msg || "Не удалось запустить технику.");
+                                    return;
+                                  }
+
+                                  const data = (await res.json()) as { reply: string };
+                                  const rawReply = data.reply ?? "";
+                                  const cleanedReply = rawReply.replace(TECHNIQUE_DONE_TOKEN, "").trim();
+                                  setDialogMessages([{ from: "ai", text: cleanedReply }]);
+                                  if (rawReply.includes(TECHNIQUE_DONE_TOKEN)) setIsTechniqueRunFinished(true);
+                                } catch {
+                                  setDialogError("Произошла ошибка сети. Попробуйте ещё раз.");
+                                } finally {
+                                  setDialogLoading(false);
+                                }
+                              })();
+                            }}
+                          >
+                            Пройти технику
+                          </button>
+                        </div>
+                      ) : isTechniqueRunFinished && dialogScenario === "run" ? (
+                        <div className="main-menu-list" style={{ marginTop: "1rem" }}>
+                          <button
+                            type="button"
+                            className="main-menu-item"
+                            onClick={() => {
+                              setIsTechniqueRunFinished(false);
+                              setShowTechniqueDialogMenu(false);
+                              setDialogScenario("analyze");
+                              setShowProceedTechniqueNow(false);
+                              setDialogMessages([]);
+                              setDialogError(null);
+                              setDialogLoading(false);
+                              setDialogImageDataUrl(null);
+                              setDialogAllowImage(false);
+                              setDialogInput("Давайте разберём эту технику под вашу ситуацию — что сейчас у вас откликается или вызывает напряжение?");
+                              setClearDialogInputOnFocus(true);
+                            }}
+                          >
+                            Разобрать технику глубже
+                          </button>
+                          <button
+                            type="button"
+                            className="main-menu-item"
+                            onClick={() => {
+                              setIsTechniqueRunFinished(false);
+                              setShowTechniqueDialogMenu(false);
+                              setShowDialogScreen(false);
+                              setShowTechniquesList(true);
+                              setSelectedTechniqueId(null);
+                              setDialogScenario(null);
+                              setDialogFromReview(false);
+                            }}
+                          >
+                            Выбрать другую технику
+                          </button>
+                          <button
+                            type="button"
+                            className="main-menu-item"
+                            onClick={() => {
+                              setIsTechniqueRunFinished(false);
+                              setShowTechniqueDialogMenu(false);
+                              resetToMainMenu();
+                            }}
+                          >
+                            В главное меню
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          <p className="onboarding-subtitle">
+                            Чтобы сохранить этот разбор и увидеть его позже в разделе «Мои разборы», в конце нажмите кнопку
+                            «Завершить диалог».
+                          </p>
+                          <button
+                            type="button"
+                            className="secondary-button"
+                            onClick={async () => {
+                              await handleSaveDialog("dialog");
+                              setShowDialogScreen(false);
+                              setDialogMessages([]);
+                              setDialogError(null);
+                              setDialogInput("");
+                              setDialogLoading(false);
+                              setDialogOrigin("none");
+                            }}
+                          >
+                            🛑 Завершить диалог
+                          </button>
+                          {dialogFromReview && (
+                            <button
+                              type="button"
+                              className="secondary-button"
+                              onClick={() => {
+                                // Закрываем диалог и возвращаемся на экран "Мои разборы".
+                                setShowDialogScreen(false);
+                                setDialogFromReview(false);
+                                setDialogOrigin("none");
+                                goBack();
+                              }}
+                            >
+                              ⬅️ Назад к списку разборов
+                            </button>
+                          )}
+                        </>
+                      )}
+                    </>
                   )}
                 </>
               ) : (
@@ -1603,10 +2338,18 @@ export default function App() {
                                   return;
                                 }
                                 const data = (await res.json()) as { title: string; description: string; image_path?: string };
+                                let dayMessage: string | null = null;
+                                try {
+                                  const generated = await generateCardDayMessage(data.title, data.description, data.image_path);
+                                  dayMessage = generated || null;
+                                } catch {
+                                  dayMessage = null;
+                                }
                                 setCardDay({
                                   title: data.title,
                                   description: data.description,
                                   imagePath: data.image_path,
+                                  dayMessage,
                                 });
                               } catch {
                                 setCardDayError("Произошла ошибка сети. Попробуйте ещё раз.");
@@ -1643,43 +2386,37 @@ export default function App() {
                   </div>
                 </>
               )}
-              <button
-                type="button"
-                className="secondary-button"
-                onClick={() => {
-                  // Глобальная кнопка «Назад» из цифрового психолога в главное меню.
-                  setShowAiCoachScreen(false);
-                  setShowMainMenuScreen(true);
-                  setShowCompass(false);
-                  setShowCabinetMenuScreen(false);
-                  setShowDialogScreen(false);
-                  setShowCardDecodeScreen(false);
-                  setShowCardDayScreen(false);
-                  setShowBirthCodeIntro(false);
-                  setShowBirthCodeLoading(false);
-                  setBirthCodeReport(null);
-                  setShowTechniquesList(false);
-                  setSelectedTechniqueId(null);
-                  setActiveTab("menu");
-                }}
-              >
-                ⬅️ Назад в главное меню
-              </button>
+              {showDialogScreen && (
+                <>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => {
+                      setShowTechniqueDialogMenu(true);
+                      setDialogScenario(null);
+                      setShowProceedTechniqueNow(false);
+                      setShowAskNextOptions(false);
+                      setIsTechniqueRunFinished(false);
+                    }}
+                  >
+                    Назад
+                  </button>
+                  <button type="button" className="secondary-button" onClick={resetToMainMenu}>
+                    В главное меню
+                  </button>
+                </>
+              )}
             </section>
           </div>
-          <nav className="bottom-nav">
+          <nav className={`bottom-nav ${isDialogInputFocused ? "bottom-nav--hidden" : ""}`}>
             <button
               type="button"
               className={`bottom-nav-button bottom-nav-button--primary ${activeTab === "daily" ? "bottom-nav-button--active" : ""}`}
               onClick={() => {
-                setShowAiCoachScreen(false);
-                setShowCompass(true);
-                setShowMainMenuScreen(false);
-                setShowCabinetMenuScreen(false);
+                pushScreen("daily");
                 setShowBirthCodeIntro(false);
                 setShowBirthCodeLoading(false);
                 setBirthCodeReport(null);
-                setActiveTab("daily");
               }}
             >
               Цифра дня
@@ -1688,14 +2425,10 @@ export default function App() {
               type="button"
               className={`bottom-nav-button bottom-nav-button--menu ${activeTab === "menu" ? "bottom-nav-button--active" : ""}`}
               onClick={() => {
-                setShowAiCoachScreen(false);
-                setShowMainMenuScreen(true);
-                setShowCabinetMenuScreen(false);
-                setShowCompass(false);
+                pushScreen("menu");
                 setShowBirthCodeIntro(false);
                 setShowBirthCodeLoading(false);
                 setBirthCodeReport(null);
-                setActiveTab("menu");
               }}
             >
               Меню
@@ -1704,14 +2437,10 @@ export default function App() {
               type="button"
               className={`bottom-nav-button bottom-nav-button--primary ${activeTab === "cabinet" ? "bottom-nav-button--active" : ""}`}
               onClick={() => {
-                setShowAiCoachScreen(false);
-                setShowCabinetMenuScreen(true);
-                setShowMainMenuScreen(false);
-                setShowCompass(false);
+                pushScreen("cabinet");
                 setShowBirthCodeIntro(false);
                 setShowBirthCodeLoading(false);
                 setBirthCodeReport(null);
-                setActiveTab("cabinet");
               }}
             >
               Личный кабинет
@@ -1728,10 +2457,6 @@ export default function App() {
         reviews={reviews}
         loading={reviewsLoading}
         error={reviewsError}
-        onBack={() => {
-          setShowMyReviewsScreen(false);
-          setShowCabinetMenuScreen(true);
-        }}
         onOpenReview={handleOpenReview}
       />
     );
@@ -1741,32 +2466,29 @@ export default function App() {
     return (
       <MainMenuScreen
         onOpenDaily={() => {
-          setShowMainMenuScreen(false);
-          setShowCompass(true);
-          setActiveTab("daily");
+          pushScreen("daily");
         }}
         onOpenAiCoach={() => {
-          setShowMainMenuScreen(false);
-          setShowAiCoachScreen(true);
-          setActiveTab("menu");
+          pushScreen("aiCoach");
         }}
         onOpenCabinet={() => {
-          setShowMainMenuScreen(false);
-          setShowCabinetMenuScreen(true);
-          setActiveTab("cabinet");
+          pushScreen("cabinet");
         }}
         onOpenDigitalPsychologist={() => {
-          setShowMainMenuScreen(false);
-          setShowAiCoachScreen(true);
+          pushScreen("aiCoach");
           setShowTechniquesList(false);
           setSelectedTechniqueId(null);
           setShowDialogScreen(true);
+          setShowTechniqueDialogMenu(false);
           setDialogMessages([]);
           setDialogError(null);
           setDialogInput("");
           setDialogLoading(false);
           setDialogAllowImage(true);
+          setDialogOrigin("none");
         }}
+        learningSurvey={learningSurvey}
+        onSaveLearningSurvey={handleSaveLearningSurvey}
         activeTab={activeTab}
       />
     );
@@ -1776,14 +2498,10 @@ export default function App() {
     return (
       <CabinetMenuScreen
         onOpenDaily={() => {
-          setShowCabinetMenuScreen(false);
-          setShowCompass(true);
-          setActiveTab("daily");
+          pushScreen("daily");
         }}
         onOpenMenu={() => {
-          setShowCabinetMenuScreen(false);
-          setShowMainMenuScreen(true);
-          setActiveTab("menu");
+          pushScreen("menu");
         }}
         onShowMyData={handleLoadCabinetProfile}
         myData={cabinetProfile}
@@ -1791,8 +2509,7 @@ export default function App() {
         myDataError={cabinetProfileError}
         onSaveMyData={handleSaveCabinetProfile}
         onOpenMyReviews={() => {
-          setShowCabinetMenuScreen(false);
-          setShowMyReviewsScreen(true);
+          pushScreen("reviews");
           void handleLoadReviews();
         }}
         activeTab={activeTab}
@@ -1812,13 +2529,10 @@ export default function App() {
       onSpin={handleSpin}
       onResetProfile={handleResetProfile}
       onOpenMenu={() => {
-        setShowMainMenuScreen(true);
-        setActiveTab("menu");
+        pushScreen("menu");
       }}
       onOpenCabinet={() => {
-        setShowMainMenuScreen(false);
-        setShowCabinetMenuScreen(true);
-        setActiveTab("cabinet");
+        pushScreen("cabinet");
       }}
       onOpenBirthSpreadModal={() => setShowBirthSpreadModal(true)}
       onCloseBirthSpreadModal={() => setShowBirthSpreadModal(false)}

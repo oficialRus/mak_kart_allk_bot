@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 
+	"mak_kart_allk_bot/internal/repository"
 	"mak_kart_allk_bot/internal/webapp"
 	"mak_kart_allk_bot/openai"
 )
@@ -70,7 +71,8 @@ func AiDialogHandler(botToken string) http.HandlerFunc {
 		}
 
 		// Валидируем initData, чтобы не обрабатывать запросы «не от Telegram».
-		if _, err := webapp.ValidateInitData(botToken, req.InitData); err != nil {
+		telegramID, err := webapp.ValidateInitData(botToken, req.InitData)
+		if err != nil {
 			log.Printf("api ai-dialog: initData validation failed: %v", err)
 			http.Error(w, "invalid or expired init data", http.StatusUnauthorized)
 			return
@@ -94,11 +96,29 @@ func AiDialogHandler(botToken string) http.HandlerFunc {
 		var userErr *openai.UserError
 
 		imageData := strings.TrimSpace(req.ImageDataURL)
+		learningContext := ""
+		if profile, perr := repository.GetProfile(r.Context(), telegramID); perr != nil {
+			log.Printf("api ai-dialog: profile load failed for telegram_id=%d: %v", telegramID, perr)
+		} else if profile != nil &&
+			strings.TrimSpace(profile.LearningLevel) != "" &&
+			strings.TrimSpace(profile.LearningGoal) != "" &&
+			strings.TrimSpace(profile.LearningFormat) != "" {
+			learningContext = "Профиль обучения пользователя:\n" +
+				"- Уровень: " + strings.TrimSpace(profile.LearningLevel) + "\n" +
+				"- Цель: " + strings.TrimSpace(profile.LearningGoal) + "\n" +
+				"- Формат: " + strings.TrimSpace(profile.LearningFormat) + "\n\n" +
+				"Используй это как постоянный контекст: адаптируй язык, примеры и рекомендации под этот профиль."
+		}
+
 		if imageData != "" {
 			// Если вместе с сообщением пришло изображение (data URL),
 			// формируем единый текстовый промпт с учётом истории и
 			// передаём его вместе с картинкой в vision‑модель.
 			var b strings.Builder
+			if learningContext != "" {
+				b.WriteString(learningContext)
+				b.WriteString("\n\n")
+			}
 			b.WriteString("Контекст беседы между человеком и ИИ‑Психологом-Коучем.\n")
 			b.WriteString("История последних сообщений (от старых к новым):\n")
 			for _, m := range h {
@@ -133,6 +153,12 @@ func AiDialogHandler(botToken string) http.HandlerFunc {
 			// Обычный текстовый диалог: системный промпт + история + текущее сообщение.
 			messages := []openai.Message{
 				{Role: "system", Content: aiCoachSystemPrompt},
+			}
+			if learningContext != "" {
+				messages = append(messages, openai.Message{
+					Role:    "system",
+					Content: learningContext,
+				})
 			}
 
 			for _, m := range h {

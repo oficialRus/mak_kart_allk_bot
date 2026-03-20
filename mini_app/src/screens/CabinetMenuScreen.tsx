@@ -158,7 +158,7 @@ const CabinetMenuScreen: React.FC<CabinetMenuScreenProps> = ({
             )}
           </section>
         </div>
-        <nav className="bottom-nav">
+        <nav className={`bottom-nav ${isEditingMyData ? "bottom-nav--hidden" : ""}`}>
           <button
             type="button"
             className={`bottom-nav-button bottom-nav-button--primary ${

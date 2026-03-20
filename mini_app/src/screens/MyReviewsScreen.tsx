@@ -11,11 +11,15 @@ type MyReviewsScreenProps = {
   reviews: ReviewSummary[];
   loading: boolean;
   error: string | null;
-  onBack: () => void;
   onOpenReview: (id: number) => void;
 };
 
-const MyReviewsScreen: React.FC<MyReviewsScreenProps> = ({ reviews, loading, error, onBack, onOpenReview }) => {
+const MyReviewsScreen: React.FC<MyReviewsScreenProps> = ({
+  reviews,
+  loading,
+  error,
+  onOpenReview,
+}) => {
   return (
     <main className="page">
       <header className="app-header">
@@ -56,9 +60,6 @@ const MyReviewsScreen: React.FC<MyReviewsScreenProps> = ({ reviews, loading, err
                 ))}
               </div>
             )}
-            <button type="button" className="secondary-button" onClick={onBack}>
-              ⬅️ Назад в личный кабинет
-            </button>
           </section>
         </div>
       </div>

@@ -11,9 +11,12 @@ import (
 
 // ProfileRequest — тело POST /api/profile от мини‑приложения.
 type ProfileRequest struct {
-	InitData  string `json:"initData"`
-	FullName  string `json:"fullName"`
-	BirthDate string `json:"birthDate"`
+	InitData       string `json:"initData"`
+	FullName       string `json:"fullName"`
+	BirthDate      string `json:"birthDate"`
+	LearningLevel  string `json:"learningLevel"`
+	LearningGoal   string `json:"learningGoal"`
+	LearningFormat string `json:"learningFormat"`
 }
 
 // ProfileHandler обрабатывает POST /api/profile: проверяет initData и сохраняет профиль в БД.
@@ -44,7 +47,16 @@ func ProfileHandler(botToken string) http.HandlerFunc {
 			return
 		}
 
-		if err := repository.SaveProfile(r.Context(), telegramID, req.FullName, req.BirthDate, ""); err != nil {
+		if err := repository.SaveProfile(
+			r.Context(),
+			telegramID,
+			req.FullName,
+			req.BirthDate,
+			"",
+			req.LearningLevel,
+			req.LearningGoal,
+			req.LearningFormat,
+		); err != nil {
 			log.Printf("api profile: save failed for telegram_id=%d: %v", telegramID, err)
 			http.Error(w, "failed to save profile", http.StatusInternalServerError)
 			return

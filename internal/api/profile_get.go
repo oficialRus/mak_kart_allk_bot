@@ -16,9 +16,12 @@ type ProfileGetRequest struct {
 
 // ProfileGetResponse — ответ с данными профиля для мини‑приложения.
 type ProfileGetResponse struct {
-	FullName  string `json:"fullName"`
-	BirthDate string `json:"birthDate"`
-	Phone     string `json:"phone"`
+	FullName       string `json:"fullName"`
+	BirthDate      string `json:"birthDate"`
+	Phone          string `json:"phone"`
+	LearningLevel  string `json:"learningLevel"`
+	LearningGoal   string `json:"learningGoal"`
+	LearningFormat string `json:"learningFormat"`
 }
 
 // ProfileGetHandler обрабатывает POST /api/profile-get:
@@ -60,9 +63,12 @@ func ProfileGetHandler(botToken string) http.HandlerFunc {
 		}
 
 		resp := ProfileGetResponse{
-			FullName:  profile.FullName,
-			BirthDate: profile.BirthDate,
-			Phone:     profile.Phone,
+			FullName:       profile.FullName,
+			BirthDate:      profile.BirthDate,
+			Phone:          profile.Phone,
+			LearningLevel:  profile.LearningLevel,
+			LearningGoal:   profile.LearningGoal,
+			LearningFormat: profile.LearningFormat,
 		}
 
 		w.Header().Set("Content-Type", "application/json")

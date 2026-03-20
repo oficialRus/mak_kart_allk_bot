@@ -14,6 +14,9 @@ func EnsureProfileTable(ctx context.Context) error {
 		full_name   TEXT NOT NULL,
 		birth_date  TEXT NOT NULL,
 		phone       TEXT NOT NULL DEFAULT '',
+		learning_level  TEXT NOT NULL DEFAULT '',
+		learning_goal   TEXT NOT NULL DEFAULT '',
+		learning_format TEXT NOT NULL DEFAULT '',
 		created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 		updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 	);
@@ -26,6 +29,18 @@ func EnsureProfileTable(ctx context.Context) error {
 	alter := `ALTER TABLE mini_app_profiles ADD COLUMN IF NOT EXISTS phone TEXT NOT NULL DEFAULT '';`
 	if _, err := Pool.ExecContext(ctx, alter); err != nil {
 		return fmt.Errorf("alter table add phone: %w", err)
+	}
+	alterLearningLevel := `ALTER TABLE mini_app_profiles ADD COLUMN IF NOT EXISTS learning_level TEXT NOT NULL DEFAULT '';`
+	if _, err := Pool.ExecContext(ctx, alterLearningLevel); err != nil {
+		return fmt.Errorf("alter table add learning_level: %w", err)
+	}
+	alterLearningGoal := `ALTER TABLE mini_app_profiles ADD COLUMN IF NOT EXISTS learning_goal TEXT NOT NULL DEFAULT '';`
+	if _, err := Pool.ExecContext(ctx, alterLearningGoal); err != nil {
+		return fmt.Errorf("alter table add learning_goal: %w", err)
+	}
+	alterLearningFormat := `ALTER TABLE mini_app_profiles ADD COLUMN IF NOT EXISTS learning_format TEXT NOT NULL DEFAULT '';`
+	if _, err := Pool.ExecContext(ctx, alterLearningFormat); err != nil {
+		return fmt.Errorf("alter table add learning_format: %w", err)
 	}
 
 	return nil
