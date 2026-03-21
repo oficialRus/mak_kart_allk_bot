@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "preview:5173": "vite preview --host 127.0.0.1 --port 5173 --strictPort"
   },
   "dependencies": {
     "@telegram-apps/sdk": "^2.0.0",
