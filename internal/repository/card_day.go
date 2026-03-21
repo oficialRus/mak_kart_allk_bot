@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"mak_kart_allk_bot/internal/db"
@@ -19,6 +20,12 @@ type CardDayCard struct {
 	CreatedAt   time.Time
 }
 
+// CardOfDayOutcome — карта дня и (если уже есть) закешированное послание за этот день.
+type CardOfDayOutcome struct {
+	Card             CardDayCard
+	CachedDayMessage string
+}
+
 var msk = time.FixedZone("MSK", 3*60*60)
 
 // todayMSK возвращает сегодняшнюю дату по Москве (UTC+3) как UTC-дату без времени.
@@ -31,15 +38,15 @@ func todayMSK() time.Time {
 // Если пользователю уже назначена карта на сегодня — возвращает её.
 // Иначе выбирает случайную из активных, исключая показанные за последние exclusionDays дней.
 // Если все карты были показаны — ослабляет ограничение и выбирает из всех активных.
-func GetOrAssignCardOfDay(ctx context.Context, userID int64, exclusionDays int) (*CardDayCard, error) {
+func GetOrAssignCardOfDay(ctx context.Context, userID int64, exclusionDays int) (*CardOfDayOutcome, error) {
 	today := todayMSK()
 
-	card, err := getTodayCard(ctx, userID, today)
+	card, cachedMsg, err := getTodayCard(ctx, userID, today)
 	if err != nil {
 		return nil, fmt.Errorf("getTodayCard: %w", err)
 	}
 	if card != nil {
-		return card, nil
+		return &CardOfDayOutcome{Card: *card, CachedDayMessage: strings.TrimSpace(cachedMsg)}, nil
 	}
 
 	recentIDs, err := getRecentCardIDs(ctx, userID, today, exclusionDays)
@@ -68,28 +75,40 @@ func GetOrAssignCardOfDay(ctx context.Context, userID int64, exclusionDays int) 
 		return nil, fmt.Errorf("saveAssignment: %w", err)
 	}
 
-	return card, nil
+	return &CardOfDayOutcome{Card: *card, CachedDayMessage: ""}, nil
 }
 
 // getTodayCard проверяет, есть ли уже назначенная карта на сегодня.
-func getTodayCard(ctx context.Context, userID int64, today time.Time) (*CardDayCard, error) {
+// Второе значение — сохранённое послание дня (если уже генерировалось).
+func getTodayCard(ctx context.Context, userID int64, today time.Time) (*CardDayCard, string, error) {
 	q := `
-	SELECT c.id, c.image_path, c.title, c.description, c.is_active, c.created_at
+	SELECT c.id, c.image_path, c.title, c.description, c.is_active, c.created_at,
+	       COALESCE(h.day_message, '')
 	FROM card_day_history h
 	JOIN card_day_cards c ON c.id = h.card_id
 	WHERE h.user_id = $1 AND h.assigned_date = $2;`
 
 	var c CardDayCard
+	var dayMsg string
 	err := db.Pool.QueryRowContext(ctx, q, userID, today).Scan(
-		&c.ID, &c.ImagePath, &c.Title, &c.Description, &c.IsActive, &c.CreatedAt,
+		&c.ID, &c.ImagePath, &c.Title, &c.Description, &c.IsActive, &c.CreatedAt, &dayMsg,
 	)
 	if err == sql.ErrNoRows {
-		return nil, nil
+		return nil, "", nil
 	}
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
-	return &c, nil
+	return &c, dayMsg, nil
+}
+
+// SaveCardDayCachedMessage сохраняет послание дня для текущей назначенной карты (дата по МСК).
+func SaveCardDayCachedMessage(ctx context.Context, userID int64, message string) error {
+	today := todayMSK()
+	msg := strings.TrimSpace(message)
+	q := `UPDATE card_day_history SET day_message = $3 WHERE user_id = $1 AND assigned_date = $2`
+	_, err := db.Pool.ExecContext(ctx, q, userID, today, msg)
+	return err
 }
 
 // getRecentCardIDs возвращает ID карт, показанных пользователю за последние days дней.

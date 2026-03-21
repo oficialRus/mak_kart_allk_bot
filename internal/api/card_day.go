@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -9,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"mak_kart_allk_bot/internal/repository"
 	"mak_kart_allk_bot/internal/webapp"
@@ -22,6 +22,7 @@ type cardDayResponse struct {
 	Title       string `json:"title"`
 	Description string `json:"description"`
 	ImagePath   string `json:"image_path"`
+	DayMessage  string `json:"day_message,omitempty"`
 }
 
 // CardDayHandler — HTTP‑обработчик для мини‑приложения:
@@ -58,17 +59,20 @@ func CardDayHandler(botToken string) http.HandlerFunc {
 			}
 		}
 
-		card, err := repository.GetOrAssignCardOfDay(context.Background(), telegramID, exclusionDays)
+		ctx := r.Context()
+		outcome, err := repository.GetOrAssignCardOfDay(ctx, telegramID, exclusionDays)
 		if err != nil {
 			log.Printf("api card-day: GetOrAssignCardOfDay failed for user %d: %v", telegramID, err)
 			http.Error(w, "failed to get card of the day", http.StatusInternalServerError)
 			return
 		}
 
-		if card == nil {
+		if outcome == nil {
 			http.Error(w, "no cards available", http.StatusNotFound)
 			return
 		}
+
+		card := outcome.Card
 
 		publicPath := ""
 		if card.ImagePath != "" {
@@ -81,8 +85,30 @@ func CardDayHandler(botToken string) http.HandlerFunc {
 			ImagePath:   publicPath,
 		}
 
+		cached := strings.TrimSpace(outcome.CachedDayMessage)
+		if cached != "" {
+			resp.DayMessage = cached
+		} else {
+			var msg string
+			apiKey := strings.TrimSpace(os.Getenv("OPENAI_API_KEY"))
+			if apiKey == "" {
+				log.Printf("api card-day: OPENAI_API_KEY is empty, using fallback day_message (user %d)", telegramID)
+			} else {
+				msg = generateCardDayMessageText(ctx, apiKey, card.Title, card.Description)
+				if msg == "" {
+					log.Printf("api card-day: AI returned empty day_message, fallback (user %d)", telegramID)
+				}
+			}
+			if msg == "" {
+				msg = fallbackCardDayMessage(card.Title, card.Description)
+			}
+			resp.DayMessage = msg
+			if err := repository.SaveCardDayCachedMessage(ctx, telegramID, msg); err != nil {
+				log.Printf("api card-day: SaveCardDayCachedMessage failed for user %d: %v", telegramID, err)
+			}
+		}
+
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		_ = json.NewEncoder(w).Encode(resp)
 	}
 }
-

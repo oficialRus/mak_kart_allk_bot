@@ -12,6 +12,8 @@ type MyReviewsScreenProps = {
   loading: boolean;
   error: string | null;
   onOpenReview: (id: number) => void;
+  onBack: () => void;
+  onMainMenu: () => void;
 };
 
 const MyReviewsScreen: React.FC<MyReviewsScreenProps> = ({
@@ -19,6 +21,8 @@ const MyReviewsScreen: React.FC<MyReviewsScreenProps> = ({
   loading,
   error,
   onOpenReview,
+  onBack,
+  onMainMenu,
 }) => {
   return (
     <main className="page">
@@ -60,6 +64,12 @@ const MyReviewsScreen: React.FC<MyReviewsScreenProps> = ({
                 ))}
               </div>
             )}
+            <button type="button" className="secondary-button" onClick={onBack}>
+              Назад
+            </button>
+            <button type="button" className="secondary-button" onClick={onMainMenu}>
+              Главное меню
+            </button>
           </section>
         </div>
       </div>

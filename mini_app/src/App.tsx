@@ -125,6 +125,24 @@ type DialogOrigin = "none" | "technique" | "cardDecode" | "cardDay" | "birthCode
 
 const STORAGE_KEY_PROFILE = "garmonia_compass_profile_v1";
 
+/** Послание дня: API, описание карты, текст по названию или общий текст — чтобы блок не пропадал при пустых полях в БД или старом API. */
+function resolveCardDayMessage(raw: {
+  day_message?: string;
+  dayMessage?: string;
+  description?: string;
+  title?: string;
+}): string {
+  const fromApi = (raw.day_message ?? raw.dayMessage ?? "").trim();
+  if (fromApi) return fromApi;
+  const desc = (raw.description ?? "").trim();
+  if (desc) return desc;
+  const t = (raw.title ?? "").trim();
+  if (t) {
+    return `Сегодняшняя карта — «${t}». Позвольте образу побыть с вами: что он подсвечивает в настроении и в том, что вы откладываете? Выберите один маленький, бережный шаг к себе — без давления, как лёгкий эксперимент на день.`;
+  }
+  return "Позвольте образу на карте побыть с вами: заметьте детали, дыхание и одну мысль без спешки. Сегодня можно сделать один маленький, бережный шаг — как лёгкий эксперимент, без давления на себя.";
+}
+
 const TECHNIQUES = [
   {
     id: 1,
@@ -236,9 +254,14 @@ function hashStringToIndex(input: string, modulo: number): number {
   return positive % modulo;
 }
 
+/** Ключ «сегодня» по календарю Москвы — как `todayMSK` на бэкенде и текст про 00:00 МСК. */
 function getTodayKey() {
-  const now = new Date();
-  return now.toISOString().slice(0, 10); // YYYY-MM-DD
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Moscow",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
 }
 
 function toRootNumber(value: number): number {
@@ -419,7 +442,13 @@ export default function App() {
     setShowAiCoachScreen(screen === "aiCoach");
     setShowMyReviewsScreen(screen === "reviews");
     setShowCompass(screen === "daily");
-    setActiveTab(screen === "menu" ? "menu" : screen === "cabinet" || screen === "reviews" ? "cabinet" : "daily");
+    setActiveTab(
+      screen === "menu" || screen === "aiCoach"
+        ? "menu"
+        : screen === "cabinet" || screen === "reviews"
+          ? "cabinet"
+          : "daily",
+    );
   };
 
   const pushScreen = (screen: AppScreen) => {
@@ -452,8 +481,39 @@ export default function App() {
     });
   };
 
+  /** Снова показать блок «Выберите одну из 9 карт…» (сброс локального выбора на сегодня). */
+  const resetCardDayToGridSelection = () => {
+    setCardDay(null);
+    setCardDaySelectedIndex(null);
+    setCardDayHint(null);
+    setCardDayError(null);
+    setCardDayLoading(false);
+    setCardDayChosenToday(false);
+    try {
+      window.localStorage.removeItem("card_day_chosen_date");
+    } catch {
+      // ignore
+    }
+  };
+
   const handleAiCoachBack = () => {
     if (showDialogScreen) {
+      if (dialogOrigin === "technique" && !showTechniqueDialogMenu) {
+        setShowTechniqueDialogMenu(true);
+        setShowAskNextOptions(false);
+        setShowProceedTechniqueNow(false);
+        setIsTechniqueRunFinished(false);
+        setDialogScenario(null);
+        setDialogLoading(false);
+        setDialogError(null);
+        setDialogImageDataUrl(null);
+        setDialogAllowImage(false);
+        setDialogMessages([]);
+        setDialogInput("");
+        setClearDialogInputOnFocus(false);
+        setIsDialogInputFocused(false);
+        return;
+      }
       setShowDialogScreen(false);
       setShowTechniqueDialogMenu(false);
       setShowAskNextOptions(false);
@@ -469,14 +529,20 @@ export default function App() {
         return;
       }
       if (dialogOrigin === "cardDay") {
+        resetCardDayToGridSelection();
         setShowCardDayScreen(true);
       } else if (dialogOrigin === "cardDecode") {
         setShowCardDecodeScreen(true);
       } else if (dialogOrigin === "birthCode") {
-        setBirthCodeReport(null);
-        setShowBirthCodeIntro(true);
-      } else {
+        setShowBirthCodeIntro(false);
+        setShowBirthCodeLoading(false);
+        setBirthCodeReport(buildBirthCodeReport(profile?.birthDate ?? ""));
+      } else if (dialogOrigin === "technique") {
         setShowTechniquesList(true);
+        // Оставляем выбранную технику — экран «Разобрать технику с ИИ‑психологом».
+      } else {
+        resetToMainMenu();
+        return;
       }
       setDialogOrigin("none");
       return;
@@ -499,6 +565,7 @@ export default function App() {
     }
     if (birthCodeReport) {
       setBirthCodeReport(null);
+      setShowBirthCodeIntro(true);
       return;
     }
     if (showBirthCodeLoading) {
@@ -1128,96 +1195,6 @@ export default function App() {
     }
   };
 
-  const generateCardDayMessage = async (title: string, description: string, imagePath?: string): Promise<string> => {
-    const safeTitle = (title ?? "").trim();
-    const safeDescription = (description ?? "").trim();
-    if (!safeTitle && !safeDescription) return "";
-
-    const apiBase = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
-    const w = window as unknown as { Telegram?: { WebApp?: { initData?: string } } };
-    const initData = w.Telegram?.WebApp?.initData ?? "";
-
-    const prompt = `Ты создаёшь короткие авторские послания для раздела «Карта дня» в приложении про самопознание.
-
-На основе названия карты, её внешнего вида и смысла напиши короткое послание на день. Текст должен ощущаться как личный внутренний ориентир для человека на сегодня: тёплый, тонкий, поддерживающий и красивый по звучанию.
-
-Тон:
-- бережный
-- глубокий
-- спокойный
-- современный
-- без инфоцыганства
-- без банальных мотивационных клише
-- без мистики и предсказаний
-
-Смысл:
-- показать человеку главный фокус дня;
-- помочь почувствовать, что именно сегодня важно заметить, принять, отпустить или усилить;
-- дать мягкий внутренний импульс, а не готовый совет в лоб.
-
-Требования:
-- 2–4 предложения;
-- компактно;
-- без списков;
-- без заголовков;
-- без повторения текста карты почти дословно;
-- не использовать фразы «вам нужно», «сегодня вас ждёт», «карта говорит», «вселенная подсказывает»;
-- писать красиво, но понятно.
-
-Данные карты:
-Название: ${safeTitle || "—"}
-Смысл: ${safeDescription || "—"}
-
-Ответь только готовым посланием.`;
-
-    let imageDataUrl: string | null = null;
-    const rawImagePath = (imagePath ?? "").trim();
-    if (rawImagePath) {
-      try {
-        if (rawImagePath.startsWith("data:")) {
-          imageDataUrl = rawImagePath;
-        } else {
-          const absoluteImageURL = new URL(rawImagePath, window.location.href).toString();
-          const imageResp = await fetch(absoluteImageURL);
-          if (imageResp.ok) {
-            const blob = await imageResp.blob();
-            imageDataUrl = await new Promise<string>((resolve, reject) => {
-              const reader = new FileReader();
-              reader.onloadend = () => {
-                if (typeof reader.result === "string") {
-                  resolve(reader.result);
-                } else {
-                  reject(new Error("failed to convert image blob to data url"));
-                }
-              };
-              reader.onerror = () => reject(reader.error ?? new Error("file reader error"));
-              reader.readAsDataURL(blob);
-            });
-          }
-        }
-      } catch {
-        imageDataUrl = null;
-      }
-    }
-
-    const res = await fetch(`${apiBase}/api/ai-dialog`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        initData,
-        message: prompt,
-        history: [],
-        imageDataUrl,
-      }),
-    });
-
-    if (!res.ok) {
-      throw new Error(await res.text());
-    }
-    const data = (await res.json()) as { reply: string };
-    return data.reply?.trim() ?? "";
-  };
-
   const openCardDayDialogWithAi = async () => {
     if (!cardDay) return;
 
@@ -1524,20 +1501,18 @@ export default function App() {
                                     setCardDayError(msg || "Не удалось получить карту дня. Попробуйте позже.");
                                     return;
                                   }
-                                  const data = (await res.json()) as { title: string; description: string; image_path?: string };
-                                  let dayMessage: string | null = null;
-                                  try {
-                                    const generated = await generateCardDayMessage(data.title, data.description, data.image_path);
-                                    dayMessage = generated || null;
-                                  } catch {
-                                    // Если генерация послания временно недоступна, покажем базовый смысл карты.
-                                    dayMessage = null;
-                                  }
+                                  const data = (await res.json()) as {
+                                    title: string;
+                                    description: string;
+                                    image_path?: string;
+                                    day_message?: string;
+                                    dayMessage?: string;
+                                  };
                                   setCardDay({
-                                    title: data.title,
-                                    description: data.description,
+                                    title: data.title ?? "",
+                                    description: data.description ?? "",
                                     imagePath: data.image_path,
-                                    dayMessage,
+                                    dayMessage: resolveCardDayMessage(data),
                                   });
                                   setCardDayChosenToday(true);
                                   try {
@@ -1565,27 +1540,24 @@ export default function App() {
                         <p className="technique-body">
                           Ваша карта дня на сегодня. Следующая карта станет доступна после 00:00 по московскому времени.
                         </p>
-                        {cardDay.dayMessage && (
-                          <p className="technique-body">
-                            {cardDay.dayMessage}
-                          </p>
-                        )}
+                        {cardDay.title && <h2 className="technique-title">{cardDay.title}</h2>}
                         {cardDay.imagePath && (
                           <div className="card-day-image-wrapper">
                             <img src={cardDay.imagePath} alt={cardDay.title || "Карта дня"} className="card-day-image" />
                           </div>
                         )}
-                        {cardDay.title && <h2 className="technique-title">{cardDay.title}</h2>}
-                        {!cardDay.dayMessage && cardDay.description && (
-                          <p className="technique-body">
-                            {cardDay.description || "Описание карты пока не задано, но вы можете прислушаться к своим ассоциациям."}
-                          </p>
-                        )}
-                        {!cardDay.dayMessage && !cardDay.description && (
-                          <p className="technique-body">
-                            {`Посмотрите на свою карту и отметьте:\n• какие детали привлекают внимание;\n• какие чувства и мысли появляются;\n• с какими ситуациями в вашей жизни это перекликается.`}
-                          </p>
-                        )}
+                        <h3 className="card-day-message-title">Послание на день</h3>
+                        <p className="technique-body card-day-daily-message">
+                          {(cardDay.dayMessage ?? "").trim()
+                            ? (cardDay.dayMessage ?? "").trim()
+                            : resolveCardDayMessage({
+                                title: cardDay.title,
+                                description: cardDay.description,
+                              })}
+                        </p>
+                        <p className="technique-body card-day-reflection-hint">
+                          {`Можно отметить для себя:\n• какие детали привлекают внимание;\n• какие чувства и мысли появляются;\n• с какими ситуациями в вашей жизни это перекликается.`}
+                        </p>
                         <button
                           type="button"
                           className="spin-button"
@@ -1602,7 +1574,11 @@ export default function App() {
                     type="button"
                     className="secondary-button"
                     onClick={() => {
-                      setShowCardDayScreen(false);
+                      if (cardDay) {
+                        resetCardDayToGridSelection();
+                      } else {
+                        setShowCardDayScreen(false);
+                      }
                     }}
                   >
                     Назад
@@ -1724,6 +1700,7 @@ export default function App() {
                     className="secondary-button"
                     onClick={() => {
                       setBirthCodeReport(null);
+                      setShowBirthCodeIntro(true);
                     }}
                   >
                     Назад
@@ -1858,6 +1835,12 @@ export default function App() {
                           задать вопрос
                         </button>
                       </div>
+                      <button type="button" className="secondary-button" onClick={handleAiCoachBack}>
+                        Назад
+                      </button>
+                      <button type="button" className="secondary-button" onClick={resetToMainMenu}>
+                        Главное меню
+                      </button>
                     </>
                   ) : (
                     <>
@@ -2337,19 +2320,18 @@ export default function App() {
                                   setCardDayError(msg || "Не удалось получить карту дня. Попробуйте позже.");
                                   return;
                                 }
-                                const data = (await res.json()) as { title: string; description: string; image_path?: string };
-                                let dayMessage: string | null = null;
-                                try {
-                                  const generated = await generateCardDayMessage(data.title, data.description, data.image_path);
-                                  dayMessage = generated || null;
-                                } catch {
-                                  dayMessage = null;
-                                }
+                                const data = (await res.json()) as {
+                                  title: string;
+                                  description: string;
+                                  image_path?: string;
+                                  day_message?: string;
+                                  dayMessage?: string;
+                                };
                                 setCardDay({
-                                  title: data.title,
-                                  description: data.description,
+                                  title: data.title ?? "",
+                                  description: data.description ?? "",
                                   imagePath: data.image_path,
-                                  dayMessage,
+                                  dayMessage: resolveCardDayMessage(data),
                                 });
                               } catch {
                                 setCardDayError("Произошла ошибка сети. Попробуйте ещё раз.");
@@ -2384,26 +2366,21 @@ export default function App() {
                       Ваш психологический код по дате рождения
                     </button>
                   </div>
-                </>
-              )}
-              {showDialogScreen && (
-                <>
-                  <button
-                    type="button"
-                    className="secondary-button"
-                    onClick={() => {
-                      setShowTechniqueDialogMenu(true);
-                      setDialogScenario(null);
-                      setShowProceedTechniqueNow(false);
-                      setShowAskNextOptions(false);
-                      setIsTechniqueRunFinished(false);
-                    }}
-                  >
+                  <button type="button" className="secondary-button" onClick={handleAiCoachBack}>
                     Назад
                   </button>
-                  <button type="button" className="secondary-button" onClick={resetToMainMenu}>
-                    В главное меню
+                </>
+              )}
+              {showDialogScreen && !showTechniqueDialogMenu && (
+                <>
+                  <button type="button" className="secondary-button" onClick={handleAiCoachBack}>
+                    Назад
                   </button>
+                  {(dialogOrigin === "cardDecode" || dialogOrigin === "birthCode") && (
+                    <button type="button" className="secondary-button" onClick={resetToMainMenu}>
+                      Главное меню
+                    </button>
+                  )}
                 </>
               )}
             </section>
@@ -2458,6 +2435,8 @@ export default function App() {
         loading={reviewsLoading}
         error={reviewsError}
         onOpenReview={handleOpenReview}
+        onBack={goBack}
+        onMainMenu={resetToMainMenu}
       />
     );
   }
@@ -2489,7 +2468,6 @@ export default function App() {
         }}
         learningSurvey={learningSurvey}
         onSaveLearningSurvey={handleSaveLearningSurvey}
-        activeTab={activeTab}
       />
     );
   }

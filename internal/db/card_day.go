@@ -40,5 +40,10 @@ func EnsureCardDayTables(ctx context.Context) error {
 		return fmt.Errorf("create index idx_card_day_history_user_date: %w", err)
 	}
 
+	alter := `ALTER TABLE card_day_history ADD COLUMN IF NOT EXISTS day_message TEXT;`
+	if _, err := Pool.ExecContext(ctx, alter); err != nil {
+		return fmt.Errorf("alter card_day_history day_message: %w", err)
+	}
+
 	return nil
 }

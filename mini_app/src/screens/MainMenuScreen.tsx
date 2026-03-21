@@ -13,7 +13,6 @@ type MainMenuScreenProps = {
     format: SurveyFormat;
   } | null;
   onSaveLearningSurvey: (payload: { level: SurveyLevel; goal: SurveyGoal; format: SurveyFormat }) => Promise<boolean>;
-  activeTab: "daily" | "menu" | "cabinet";
 };
 
 type LearningView = "menu" | "intro" | "survey" | "afterSurvey" | "modules";
@@ -29,7 +28,6 @@ const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
   onOpenDigitalPsychologist,
   learningSurvey,
   onSaveLearningSurvey,
-  activeTab,
 }) => {
   const [showFeedbackMenu, setShowFeedbackMenu] = useState(false);
   const [learningView, setLearningView] = useState<LearningView>("menu");
@@ -68,7 +66,7 @@ const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
       <header className="app-header">
         <img src="/logo.png" alt="Гармония-Мак — Самопознание" className="app-logo" />
       </header>
-      <div className={`page-inner page-inner--blue ${activeTab === "menu" ? "page-inner--menu" : ""}`}>
+      <div className="page-inner page-inner--blue page-inner--menu">
         <section className="roulette-card onboarding-card roulette-card--stars">
             {learningView === "menu" && (
               <>
@@ -388,33 +386,19 @@ const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
           </div>
         )}
         <nav className="bottom-nav">
-          <button
-            type="button"
-            className={`bottom-nav-button bottom-nav-button--primary ${
-              activeTab === "daily" ? "bottom-nav-button--active" : ""
-            }`}
-            onClick={onOpenDaily}
-          >
+          <button type="button" className="bottom-nav-button bottom-nav-button--primary" onClick={onOpenDaily}>
             Цифра дня
           </button>
           <button
             type="button"
-            className={`bottom-nav-button bottom-nav-button--menu ${
-              activeTab === "menu" ? "bottom-nav-button--active" : ""
-            }`}
+            className="bottom-nav-button bottom-nav-button--menu bottom-nav-button--active"
             onClick={() => {
               if (learningView !== "menu") resetLearning();
             }}
           >
             Меню
           </button>
-          <button
-            type="button"
-            className={`bottom-nav-button bottom-nav-button--primary ${
-              activeTab === "cabinet" ? "bottom-nav-button--active" : ""
-            }`}
-            onClick={onOpenCabinet}
-          >
+          <button type="button" className="bottom-nav-button bottom-nav-button--primary" onClick={onOpenCabinet}>
             Личный кабинет
           </button>
         </nav>
