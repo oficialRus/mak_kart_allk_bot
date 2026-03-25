@@ -33,11 +33,6 @@ func ProfileHandler(botToken string) http.HandlerFunc {
 			return
 		}
 
-		if req.FullName == "" || req.BirthDate == "" {
-			http.Error(w, "fullName and birthDate required", http.StatusBadRequest)
-			return
-		}
-
 		log.Printf("api profile: received fullName=%q birthDate=%q initData_len=%d", req.FullName, req.BirthDate, len(req.InitData))
 
 		telegramID, err := webapp.ValidateInitData(botToken, req.InitData)

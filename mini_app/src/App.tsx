@@ -100,7 +100,12 @@ function validateBirthDate(raw: string): { normalized?: string; error?: string }
   return { normalized };
 }
 
+/** Запись пользователя в БД; ФИО и дата рождения в профиль не входят — только для разбора по дате. */
 type Profile = {
+  v: 1;
+};
+
+type BirthCodeAnalysisContext = {
   fullName: string;
   birthDate: string;
 };
@@ -124,6 +129,7 @@ type AppScreen = "daily" | "menu" | "cabinet" | "aiCoach" | "reviews";
 type DialogOrigin = "none" | "technique" | "cardDecode" | "cardDay" | "birthCode" | "review";
 
 const STORAGE_KEY_PROFILE = "garmonia_compass_profile_v1";
+const STORAGE_KEY_BIRTH_CODE_DRAFT = "garmonia_birth_code_draft_v1";
 
 /** Послание дня: API, описание карты, текст по названию или общий текст — чтобы блок не пропадал при пустых полях в БД или старом API. */
 function resolveCardDayMessage(raw: {
@@ -378,12 +384,7 @@ export default function App() {
   const [isSpinning, setIsSpinning] = useState(false);
   const [hasResult, setHasResult] = useState(false);
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [profileForm, setProfileForm] = useState<Profile>({
-    fullName: "",
-    birthDate: "",
-  });
-  const [profileErrors, setProfileErrors] = useState<Partial<Record<keyof Profile, string>>>({});
-  const [isProfileSubmitting, setIsProfileSubmitting] = useState(false);
+  const [isRegisterSubmitting, setIsRegisterSubmitting] = useState(false);
   const [dailyIndex, setDailyIndex] = useState<number | null>(null);
   const [dailyMessage, setDailyMessage] = useState<string | null>(null);
   const [showBirthSpreadModal, setShowBirthSpreadModal] = useState(false);
@@ -419,9 +420,6 @@ export default function App() {
   const [cardDayChosenToday, setCardDayChosenToday] = useState(false);
   const [cardDaySelectedIndex, setCardDaySelectedIndex] = useState<number | null>(null);
   const [cardDayHint, setCardDayHint] = useState<string | null>(null);
-  const [cabinetProfile, setCabinetProfile] = useState<{ fullName: string; birthDate: string; phone?: string } | null>(null);
-  const [cabinetProfileLoading, setCabinetProfileLoading] = useState(false);
-  const [cabinetProfileError, setCabinetProfileError] = useState<string | null>(null);
   const [showMyReviewsScreen, setShowMyReviewsScreen] = useState(false);
   const [reviews, setReviews] = useState<{ id: number; mode: string; title: string; createdAt: string }[]>([]);
   const [reviewsLoading, setReviewsLoading] = useState(false);
@@ -429,6 +427,9 @@ export default function App() {
   const [showBirthCodeIntro, setShowBirthCodeIntro] = useState(false);
   const [showBirthCodeLoading, setShowBirthCodeLoading] = useState(false);
   const [birthCodeReport, setBirthCodeReport] = useState<BirthCodeReport | null>(null);
+  const [birthCodeForm, setBirthCodeForm] = useState({ fullName: "", birthDate: "" });
+  const [birthCodeErrors, setBirthCodeErrors] = useState<Partial<Record<"fullName" | "birthDate", string>>>({});
+  const [birthCodeContext, setBirthCodeContext] = useState<BirthCodeAnalysisContext | null>(null);
   const dialogHistoryRef = useRef<HTMLDivElement | null>(null);
   const [isDialogInputFocused, setIsDialogInputFocused] = useState(false);
   const [clearDialogInputOnFocus, setClearDialogInputOnFocus] = useState(false);
@@ -536,7 +537,12 @@ export default function App() {
       } else if (dialogOrigin === "birthCode") {
         setShowBirthCodeIntro(false);
         setShowBirthCodeLoading(false);
-        setBirthCodeReport(buildBirthCodeReport(profile?.birthDate ?? ""));
+        if (birthCodeContext) {
+          setBirthCodeReport(buildBirthCodeReport(birthCodeContext.birthDate));
+        } else {
+          setBirthCodeReport(null);
+          setShowBirthCodeIntro(true);
+        }
       } else if (dialogOrigin === "technique") {
         setShowTechniquesList(true);
         // Оставляем выбранную технику — экран «Разобрать технику с ИИ‑психологом».
@@ -565,6 +571,7 @@ export default function App() {
     }
     if (birthCodeReport) {
       setBirthCodeReport(null);
+      setBirthCodeContext(null);
       setShowBirthCodeIntro(true);
       return;
     }
@@ -685,20 +692,13 @@ export default function App() {
           }
 
           const data = (await res.json()) as {
-            fullName: string;
-            birthDate: string;
+            fullName?: string;
+            birthDate?: string;
             learningLevel?: string;
             learningGoal?: string;
             learningFormat?: string;
           };
-          if (!data.fullName || !data.birthDate) return;
-
-          const parsed: Profile = {
-            fullName: data.fullName,
-            birthDate: data.birthDate,
-          };
-          setProfile(parsed);
-          setProfileForm(parsed);
+          setProfile({ v: 1 });
           if (data.learningLevel && data.learningGoal && data.learningFormat) {
             setLearningSurvey({
               level: data.learningLevel as LearningSurvey["level"],
@@ -709,7 +709,7 @@ export default function App() {
           setNavigationStack(["menu"]);
           activateScreen("menu");
           try {
-            window.localStorage.setItem(STORAGE_KEY_PROFILE, JSON.stringify(parsed));
+            window.localStorage.setItem(STORAGE_KEY_PROFILE, JSON.stringify({ v: 1 } satisfies Profile));
           } catch {
             // ignore
           }
@@ -724,10 +724,18 @@ export default function App() {
     try {
       const raw = window.localStorage.getItem(STORAGE_KEY_PROFILE);
       if (!raw) return;
-      const parsed = JSON.parse(raw) as Profile;
-      if (!parsed.fullName || !parsed.birthDate) return;
-      setProfile(parsed);
-      setProfileForm(parsed);
+      const parsed = JSON.parse(raw) as unknown;
+      const legacyOk =
+        typeof parsed === "object" &&
+        parsed !== null &&
+        "fullName" in parsed &&
+        "birthDate" in parsed &&
+        typeof (parsed as { fullName: unknown }).fullName === "string" &&
+        typeof (parsed as { birthDate: unknown }).birthDate === "string";
+      const modernOk =
+        typeof parsed === "object" && parsed !== null && (parsed as { v?: unknown }).v === 1;
+      if (!legacyOk && !modernOk) return;
+      setProfile({ v: 1 });
       setNavigationStack(["menu"]);
       activateScreen("menu");
     } catch {
@@ -798,7 +806,7 @@ export default function App() {
     // если нет initData или API недоступен.
     const computeFallbackIndex = () => {
       const todayKey = getTodayKey();
-      const key = `${profile.fullName}|${profile.birthDate}|${todayKey}|${initData}`;
+      const key = `${todayKey}|${initData}|garmonia_daily_v1`;
       const idx = hashStringToIndex(key, SECTOR_COUNT);
       setDailyIndex(idx);
       setWinningIndex(null);
@@ -843,50 +851,15 @@ export default function App() {
     })();
   }, [profile]);
 
-  const handleProfileChange = (field: keyof Profile, value: string) => {
-    let nextValue = value;
-    if (field === "fullName") {
-      nextValue = sanitizeFullNameInput(value);
-    }
-    if (field === "birthDate") {
-      nextValue = formatBirthDateInput(value);
-    }
-    setProfileForm((prev) => ({ ...prev, [field]: nextValue }));
-    setProfileErrors((prev) => ({ ...prev, [field]: undefined }));
-  };
-
-  const handleProfileSubmit = async (e: any) => {
+  const handleProfileSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isProfileSubmitting) return;
-
-    const errors: Partial<Record<keyof Profile, string>> = {};
-
-    const fullNameCheck = validateFullName(profileForm.fullName);
-    const birthDateCheck = validateBirthDate(profileForm.birthDate);
-
-    if (fullNameCheck.error) {
-      errors.fullName = fullNameCheck.error;
-    }
-    if (birthDateCheck.error) {
-      errors.birthDate = birthDateCheck.error;
-    }
-
-    if (Object.keys(errors).length > 0) {
-      setProfileErrors(errors);
-      return;
-    }
-
-    setIsProfileSubmitting(true);
-    const cleanProfile: Profile = {
-      fullName: (fullNameCheck.normalized ?? profileForm.fullName.trim()).replace(/\s+/g, " "),
-      birthDate: birthDateCheck.normalized ?? profileForm.birthDate.trim(),
-    };
+    if (isRegisterSubmitting) return;
+    setIsRegisterSubmitting(true);
     try {
-      window.localStorage.setItem(STORAGE_KEY_PROFILE, JSON.stringify(cleanProfile));
+      window.localStorage.setItem(STORAGE_KEY_PROFILE, JSON.stringify({ v: 1 } satisfies Profile));
     } catch {
       // ignore
     }
-    // Отправка профиля на бэкенд (ФИО, дата рождения, Telegram ID из initData).
     const apiBase = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
     const initData = (window as unknown as { Telegram?: { WebApp?: { initData?: string } } }).Telegram?.WebApp?.initData ?? "";
     try {
@@ -895,8 +868,8 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           initData,
-          fullName: cleanProfile.fullName,
-          birthDate: cleanProfile.birthDate,
+          fullName: "",
+          birthDate: "",
         }),
       });
       if (!res.ok) {
@@ -905,11 +878,53 @@ export default function App() {
     } catch (e) {
       console.warn("Profile API request failed:", e);
     }
-    setProfile(cleanProfile);
+    setProfile({ v: 1 });
     setNavigationStack(["menu"]);
     activateScreen("menu");
-    setIsProfileSubmitting(false);
+    setIsRegisterSubmitting(false);
   };
+
+  const handleBirthCodeFieldChange = (field: "fullName" | "birthDate", value: string) => {
+    const next =
+      field === "fullName" ? sanitizeFullNameInput(value) : formatBirthDateInput(value);
+    setBirthCodeForm((prev) => ({ ...prev, [field]: next }));
+    setBirthCodeErrors((prev) => ({ ...prev, [field]: undefined }));
+  };
+
+  const openBirthCodeFlow = () => {
+    setShowBirthCodeIntro(true);
+    setShowBirthCodeLoading(false);
+    setBirthCodeReport(null);
+    setBirthCodeContext(null);
+    setBirthCodeErrors({});
+    setShowDialogScreen(false);
+    setShowCardDecodeScreen(false);
+    setShowCardDayScreen(false);
+    setShowTechniquesList(false);
+    try {
+      const raw = sessionStorage.getItem(STORAGE_KEY_BIRTH_CODE_DRAFT);
+      if (raw) {
+        const d = JSON.parse(raw) as { fullName?: string; birthDate?: string };
+        setBirthCodeForm({
+          fullName: typeof d.fullName === "string" ? d.fullName : "",
+          birthDate: typeof d.birthDate === "string" ? d.birthDate : "",
+        });
+        return;
+      }
+    } catch {
+      // ignore
+    }
+    setBirthCodeForm({ fullName: "", birthDate: "" });
+  };
+
+  useEffect(() => {
+    if (!showBirthCodeIntro) return;
+    try {
+      sessionStorage.setItem(STORAGE_KEY_BIRTH_CODE_DRAFT, JSON.stringify(birthCodeForm));
+    } catch {
+      // ignore
+    }
+  }, [birthCodeForm, showBirthCodeIntro]);
 
   const handleResetProfile = () => {
     try {
@@ -919,11 +934,6 @@ export default function App() {
     }
     setProfile(null);
     setLearningSurvey(null);
-    setProfileForm({
-      fullName: "",
-      birthDate: "",
-    });
-    setProfileErrors({});
     setDailyIndex(null);
     setWinningIndex(null);
     setHasResult(false);
@@ -1080,95 +1090,6 @@ export default function App() {
     }
   };
 
-  const handleLoadCabinetProfile = async () => {
-    setCabinetProfileError(null);
-    setCabinetProfileLoading(true);
-    const w = window as unknown as { Telegram?: { WebApp?: { initData?: string } } };
-    const initData = w.Telegram?.WebApp?.initData ?? "";
-    const apiBase = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
-    try {
-      const res = await fetch(`${apiBase}/api/profile-get`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ initData }),
-      });
-      if (!res.ok) {
-        if (res.status === 404) {
-          setCabinetProfile(null);
-          setCabinetProfileError("Профиль пока не заполнен.");
-        } else {
-          const msg = await res.text();
-          setCabinetProfileError(msg || "Не удалось загрузить профиль.");
-        }
-        return;
-      }
-      const data = (await res.json()) as { fullName: string; birthDate: string; phone?: string };
-      setCabinetProfile({
-        fullName: data.fullName,
-        birthDate: data.birthDate,
-        phone: data.phone,
-      });
-    } catch {
-      setCabinetProfileError("Произошла ошибка сети. Попробуйте ещё раз.");
-    } finally {
-      setCabinetProfileLoading(false);
-    }
-  };
-
-  const handleSaveCabinetProfile = async (data: { fullName: string; birthDate: string }): Promise<{ ok: boolean; error?: string }> => {
-    const fullNameCheck = validateFullName(data.fullName);
-    if (fullNameCheck.error) {
-      return { ok: false, error: fullNameCheck.error };
-    }
-    const birthDateCheck = validateBirthDate(data.birthDate);
-    if (birthDateCheck.error) {
-      return { ok: false, error: birthDateCheck.error };
-    }
-
-    const fullName = (fullNameCheck.normalized ?? data.fullName.trim()).replace(/\s+/g, " ");
-    const birthDate = birthDateCheck.normalized ?? data.birthDate.trim();
-
-    const w = window as unknown as { Telegram?: { WebApp?: { initData?: string } } };
-    const initData = w.Telegram?.WebApp?.initData ?? "";
-    const apiBase = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
-
-    try {
-      const res = await fetch(`${apiBase}/api/profile`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          initData,
-          fullName,
-          birthDate,
-        }),
-      });
-      if (!res.ok) {
-        const msg = await res.text();
-        return { ok: false, error: msg || "Не удалось сохранить данные." };
-      }
-
-      setCabinetProfile((prev) => ({
-        fullName,
-        birthDate,
-        phone: prev?.phone,
-      }));
-
-      // Обновляем профиль приложения, чтобы остальные расчёты использовали новые данные.
-      const updatedProfile: Profile = { fullName, birthDate };
-      setProfile(updatedProfile);
-      setProfileForm(updatedProfile);
-      try {
-        window.localStorage.setItem(STORAGE_KEY_PROFILE, JSON.stringify(updatedProfile));
-      } catch {
-        // ignore
-      }
-
-      return { ok: true };
-    } catch {
-      return { ok: false, error: "Произошла ошибка сети. Попробуйте ещё раз." };
-    }
-  };
-
   const handleSaveLearningSurvey = async (payload: LearningSurvey): Promise<boolean> => {
     if (!profile) return false;
     const w = window as unknown as { Telegram?: { WebApp?: { initData?: string } } };
@@ -1180,8 +1101,8 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           initData,
-          fullName: profile.fullName,
-          birthDate: profile.birthDate,
+          fullName: "",
+          birthDate: "",
           learningLevel: payload.level,
           learningGoal: payload.goal,
           learningFormat: payload.format,
@@ -1293,35 +1214,14 @@ export default function App() {
         <div className="page-inner">
           <div className="page-main">
             <section className="roulette-card onboarding-card">
-              <h1 className="onboarding-title">Познакомимся ближе</h1>
-              <p className="onboarding-subtitle">Заполните данные, чтобы рассчитать вашу личную цифру дня.</p>
+              <h1 className="onboarding-title">Добро пожаловать</h1>
+              <p className="onboarding-subtitle">
+                Нажмите «Начать», чтобы войти в приложение. Имя и дата рождения понадобятся только в разделе разбора по
+                дате рождения — мы не сохраняем их как «профиль» в кабинете.
+              </p>
               <form className="onboarding-form" onSubmit={handleProfileSubmit}>
-                <label className="onboarding-field">
-                  <span className="onboarding-label">ФИО</span>
-                  <input
-                    type="text"
-                    className={`onboarding-input ${profileErrors.fullName ? "has-error" : ""}`}
-                    placeholder="Фамилия Имя Отчество"
-                    value={profileForm.fullName}
-                    onChange={(e) => handleProfileChange("fullName", e.target.value)}
-                  />
-                  {profileErrors.fullName && <span className="onboarding-error">{profileErrors.fullName}</span>}
-                </label>
-
-                <label className="onboarding-field">
-                  <span className="onboarding-label">Дата рождения</span>
-                  <input
-                    type="text"
-                    className={`onboarding-input ${profileErrors.birthDate ? "has-error" : ""}`}
-                    placeholder="Например, 15.05.1990"
-                    value={profileForm.birthDate}
-                    onChange={(e) => handleProfileChange("birthDate", e.target.value)}
-                  />
-                  {profileErrors.birthDate && <span className="onboarding-error">{profileErrors.birthDate}</span>}
-                </label>
-
-                <button type="submit" className="spin-button" disabled={isProfileSubmitting}>
-                  {isProfileSubmitting ? "Сохраняем..." : "Подтвердить и перейти к компасу"}
+                <button type="submit" className="spin-button" disabled={isRegisterSubmitting}>
+                  {isRegisterSubmitting ? "Открываем…" : "Начать"}
                 </button>
               </form>
             </section>
@@ -1589,27 +1489,70 @@ export default function App() {
                 </>
               ) : showBirthCodeIntro ? (
                 <>
-                  <h2 className="technique-title">Ваш психологический код по дате рождения</h2>
+                  <h2 className="technique-title">Разбор по дате рождения</h2>
                   <div className="technique-text">
                     <p className="technique-body">
-                      {`Это не просто расчёт.\n\nДата рождения — это структура вашей личности:\nваши сильные стороны, внутренние конфликты,\nповеденческие паттерны и точки роста.\n\nЯ разберу её и покажу,\nкак вы мыслите, принимаете решения\nи что сейчас влияет на ваше состояние.\n\nОткройте ниже, чтобы получить свой разбор.`}
+                      {`Сначала коротко о смысле разбора.\n\nДата рождения задаёт «каркас» личности: сильные стороны, внутренние конфликты, привычные паттерны и точки роста.\n\nНиже введите данные только для этого расчёта — мы не привязываем их к личному кабинету как к профилю.`}
+                    </p>
+                    <p className="technique-body" style={{ fontWeight: 600, marginBottom: "0.35rem" }}>
+                      Шаг 1. Данные для расчёта
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    className="spin-button"
-                    onClick={() => {
+                  <form
+                    className="onboarding-form"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      const errs: Partial<Record<"fullName" | "birthDate", string>> = {};
+                      const fn = validateFullName(birthCodeForm.fullName);
+                      const bd = validateBirthDate(birthCodeForm.birthDate);
+                      if (fn.error) errs.fullName = fn.error;
+                      if (bd.error) errs.birthDate = bd.error;
+                      if (Object.keys(errs).length > 0) {
+                        setBirthCodeErrors(errs);
+                        return;
+                      }
+                      const fullName = (fn.normalized ?? birthCodeForm.fullName.trim()).replace(/\s+/g, " ");
+                      const birthDate = bd.normalized ?? birthCodeForm.birthDate.trim();
+                      setBirthCodeContext({ fullName, birthDate });
+                      setBirthCodeErrors({});
                       setShowBirthCodeIntro(false);
                       setShowBirthCodeLoading(true);
                       setBirthCodeReport(null);
                       window.setTimeout(() => {
-                        setBirthCodeReport(buildBirthCodeReport(profile?.birthDate ?? ""));
+                        setBirthCodeReport(buildBirthCodeReport(birthDate));
                         setShowBirthCodeLoading(false);
                       }, 2200);
                     }}
                   >
-                    👉 Получить разбор
-                  </button>
+                    <label className="onboarding-field">
+                      <span className="onboarding-label">ФИО</span>
+                      <input
+                        type="text"
+                        className={`onboarding-input ${birthCodeErrors.fullName ? "has-error" : ""}`}
+                        placeholder="Как к вам обращаться в тексте разбора"
+                        autoComplete="name"
+                        value={birthCodeForm.fullName}
+                        onChange={(e) => handleBirthCodeFieldChange("fullName", e.target.value)}
+                      />
+                      {birthCodeErrors.fullName && <span className="onboarding-error">{birthCodeErrors.fullName}</span>}
+                    </label>
+                    <label className="onboarding-field">
+                      <span className="onboarding-label">Дата рождения</span>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        className={`onboarding-input ${birthCodeErrors.birthDate ? "has-error" : ""}`}
+                        placeholder="ДД.ММ.ГГГГ"
+                        autoComplete="bday"
+                        value={birthCodeForm.birthDate}
+                        onChange={(e) => handleBirthCodeFieldChange("birthDate", e.target.value)}
+                      />
+                      {birthCodeErrors.birthDate && <span className="onboarding-error">{birthCodeErrors.birthDate}</span>}
+                    </label>
+                    <button type="submit" className="spin-button">
+                      Далее: получить разбор
+                    </button>
+                  </form>
                   <button
                     type="button"
                     className="secondary-button"
@@ -1668,7 +1611,10 @@ export default function App() {
                     type="button"
                     className="spin-button"
                     onClick={() => {
-                      const reportText = `Хочу обсудить мой психологический код по дате рождения.\n\nТип личности: ${birthCodeReport.personalityType}\nКлючевая энергия: ${birthCodeReport.keyEnergy}\n\nКак я принимаю решения: ${birthCodeReport.decisionPattern}\n\nСильные стороны:\n- ${birthCodeReport.strengths.join("\n- ")}\n\nОграничения:\n- ${birthCodeReport.conflicts.join("\n- ")}\n\nФокус сейчас: ${birthCodeReport.focusNow}`;
+                      const ctxLine = birthCodeContext
+                        ? `Данные для этого разбора (не из профиля кабинета): ${birthCodeContext.fullName}, дата рождения ${birthCodeContext.birthDate}.\n\n`
+                        : "";
+                      const reportText = `${ctxLine}Хочу обсудить мой психологический код по дате рождения.\n\nТип личности: ${birthCodeReport.personalityType}\nКлючевая энергия: ${birthCodeReport.keyEnergy}\n\nКак я принимаю решения: ${birthCodeReport.decisionPattern}\n\nСильные стороны:\n- ${birthCodeReport.strengths.join("\n- ")}\n\nОграничения:\n- ${birthCodeReport.conflicts.join("\n- ")}\n\nФокус сейчас: ${birthCodeReport.focusNow}`;
 
                       setBirthCodeReport(null);
                       setShowBirthCodeIntro(false);
@@ -1700,6 +1646,7 @@ export default function App() {
                     className="secondary-button"
                     onClick={() => {
                       setBirthCodeReport(null);
+                      setBirthCodeContext(null);
                       setShowBirthCodeIntro(true);
                     }}
                   >
@@ -2350,19 +2297,7 @@ export default function App() {
                     >
                       Карта дня
                     </button>
-                    <button
-                      type="button"
-                      className="main-menu-item"
-                      onClick={() => {
-                        setShowBirthCodeIntro(true);
-                        setShowBirthCodeLoading(false);
-                        setBirthCodeReport(null);
-                        setShowDialogScreen(false);
-                        setShowCardDecodeScreen(false);
-                        setShowCardDayScreen(false);
-                        setShowTechniquesList(false);
-                      }}
-                    >
+                    <button type="button" className="main-menu-item" onClick={openBirthCodeFlow}>
                       Ваш психологический код по дате рождения
                     </button>
                   </div>
@@ -2481,11 +2416,6 @@ export default function App() {
         onOpenMenu={() => {
           pushScreen("menu");
         }}
-        onShowMyData={handleLoadCabinetProfile}
-        myData={cabinetProfile}
-        myDataLoading={cabinetProfileLoading}
-        myDataError={cabinetProfileError}
-        onSaveMyData={handleSaveCabinetProfile}
         onOpenMyReviews={() => {
           pushScreen("reviews");
           void handleLoadReviews();
