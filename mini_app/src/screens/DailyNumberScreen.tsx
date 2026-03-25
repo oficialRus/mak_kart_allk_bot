@@ -68,7 +68,6 @@ type DailyNumberScreenProps = {
   onOpenCabinet: () => void;
   onOpenBirthSpreadModal: () => void;
   onCloseBirthSpreadModal: () => void;
-  onOpenCabinetFromModal: () => void;
   activeTab: "daily" | "menu" | "cabinet";
 };
 
@@ -86,7 +85,6 @@ const DailyNumberScreen: React.FC<DailyNumberScreenProps> = ({
   onOpenCabinet,
   onOpenBirthSpreadModal,
   onCloseBirthSpreadModal,
-  onOpenCabinetFromModal,
   activeTab,
 }) => {
   return (
@@ -415,11 +413,19 @@ const DailyNumberScreen: React.FC<DailyNumberScreenProps> = ({
               ×
             </button>
             <p className="modal-text">
-              Перейдите в личный кабинет бота, чтобы получить свой расклад по дате рождения.
+              Расклад по дате рождения делается в приложении: «Меню» → «ИИ психолог коуч» → «Ваш психологический код по дате
+              рождения». Там вы введите имя и дату только для этого разбора.
             </p>
             <div className="modal-actions">
-              <button type="button" className="modal-close-app-btn" onClick={onOpenCabinetFromModal}>
-                Личный кабинет
+              <button
+                type="button"
+                className="modal-close-app-btn"
+                onClick={() => {
+                  onCloseBirthSpreadModal();
+                  onOpenMenu();
+                }}
+              >
+                Перейти в меню
               </button>
             </div>
           </div>

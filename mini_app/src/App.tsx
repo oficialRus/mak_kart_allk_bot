@@ -388,7 +388,6 @@ export default function App() {
   const [dailyIndex, setDailyIndex] = useState<number | null>(null);
   const [dailyMessage, setDailyMessage] = useState<string | null>(null);
   const [showBirthSpreadModal, setShowBirthSpreadModal] = useState(false);
-  const [isClosingToCabinet, setIsClosingToCabinet] = useState(false);
   const [showCompass, setShowCompass] = useState(false);
   const [showMainMenuScreen, setShowMainMenuScreen] = useState(false);
   const [showCabinetMenuScreen, setShowCabinetMenuScreen] = useState(false);
@@ -971,38 +970,6 @@ export default function App() {
       setIsSpinning(false);
       setHasResult(true);
     }, SPIN_DURATION_MS);
-  };
-
-  const handleOpenCabinet = async () => {
-    if (isClosingToCabinet) return;
-    setIsClosingToCabinet(true);
-    const w = window as unknown as {
-      Telegram?: {
-        WebApp?: {
-          initData?: string;
-          close?: () => void;
-        };
-      };
-    };
-    try {
-      const initData = w.Telegram?.WebApp?.initData ?? "";
-      const apiBase = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
-      if (initData) {
-        await fetch(`${apiBase}/api/open-cabinet`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ initData }),
-        }).catch(() => {});
-      }
-    } catch {
-      // ignore
-    }
-    try {
-      w.Telegram?.WebApp?.close?.();
-    } catch {
-      // ignore
-    }
-    setIsClosingToCabinet(false);
   };
 
   const handleSaveDialog = async (mode: string) => {
@@ -2444,7 +2411,6 @@ export default function App() {
       }}
       onOpenBirthSpreadModal={() => setShowBirthSpreadModal(true)}
       onCloseBirthSpreadModal={() => setShowBirthSpreadModal(false)}
-      onOpenCabinetFromModal={handleOpenCabinet}
       activeTab={activeTab}
     />
   );

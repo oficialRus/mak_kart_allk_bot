@@ -57,8 +57,8 @@ func SaveProfile(ctx context.Context, telegramID int64, fullName, birthDate, pho
 	INSERT INTO mini_app_profiles (telegram_id, full_name, birth_date, phone, learning_level, learning_goal, learning_format)
 	VALUES ($1, $2, $3, $4, $5, $6, $7)
 	ON CONFLICT (telegram_id) DO UPDATE SET
-		full_name  = EXCLUDED.full_name,
-		birth_date = EXCLUDED.birth_date,
+		full_name  = CASE WHEN EXCLUDED.full_name = '' THEN mini_app_profiles.full_name ELSE EXCLUDED.full_name END,
+		birth_date = CASE WHEN EXCLUDED.birth_date = '' THEN mini_app_profiles.birth_date ELSE EXCLUDED.birth_date END,
 		phone      = CASE WHEN EXCLUDED.phone = '' THEN mini_app_profiles.phone ELSE EXCLUDED.phone END,
 		learning_level = CASE WHEN EXCLUDED.learning_level = '' THEN mini_app_profiles.learning_level ELSE EXCLUDED.learning_level END,
 		learning_goal = CASE WHEN EXCLUDED.learning_goal = '' THEN mini_app_profiles.learning_goal ELSE EXCLUDED.learning_goal END,
