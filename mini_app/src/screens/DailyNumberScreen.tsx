@@ -40,19 +40,19 @@ function numberPosition(i: number, r: number) {
 const NUMBERS = Array.from({ length: SECTOR_COUNT }, (_, index) => index + 1);
 
 const SEGMENT_GRADIENTS = [
-  { from: "#0d1629", to: "#0f182c" },
-  { from: "#0c1528", to: "#0e172b" },
-  { from: "#0d1629", to: "#0f182d" },
-  { from: "#0b132b", to: "#0d1629" },
-  { from: "#0c1528", to: "#0e172b" },
-  { from: "#0c1428", to: "#0e172b" },
-  { from: "#0b132b", to: "#0d1629" },
-  { from: "#0d1629", to: "#0f182c" },
-  { from: "#0c1529", to: "#0e172c" },
+  { from: "#f8fafc", to: "#e2e8f0" },
+  { from: "#eff6ff", to: "#dbeafe" },
+  { from: "#f0f9ff", to: "#e0f2fe" },
+  { from: "#eef2ff", to: "#e0e7ff" },
+  { from: "#f1f5f9", to: "#cbd5e1" },
+  { from: "#f8fafc", to: "#e2e8f0" },
+  { from: "#eff6ff", to: "#bfdbfe" },
+  { from: "#f0f9ff", to: "#bae6fd" },
+  { from: "#f8fafc", to: "#cbd5e1" },
 ];
 
-const NUMBER_COLOR = "#E8DCC0";
-const ACCENT_GOLD = "#C9A96E";
+const NUMBER_COLOR = "#0f172a";
+const ACCENT_GOLD = "#2563eb";
 
 type DailyNumberScreenProps = {
   showCompass: boolean;
@@ -142,10 +142,10 @@ const DailyNumberScreen: React.FC<DailyNumberScreenProps> = ({
                             );
                           })}
                           <radialGradient id="centerGlow" cx="50%" cy="50%" r="50%">
-                            <stop offset="0%" stopColor="#E8DCC0" stopOpacity="0.85" />
-                            <stop offset="28%" stopColor={ACCENT_GOLD} stopOpacity="0.4" />
-                            <stop offset="60%" stopColor={ACCENT_GOLD} stopOpacity="0.12" />
-                            <stop offset="100%" stopColor="#0B132B" stopOpacity="0" />
+                            <stop offset="0%" stopColor="#ffffff" stopOpacity="0.95" />
+                            <stop offset="35%" stopColor={ACCENT_GOLD} stopOpacity="0.35" />
+                            <stop offset="65%" stopColor={ACCENT_GOLD} stopOpacity="0.1" />
+                            <stop offset="100%" stopColor="#ffffff" stopOpacity="0" />
                           </radialGradient>
                           <linearGradient id="outerSweepGrad" x1="0" y1="0" x2="100" y2="0" gradientUnits="userSpaceOnUse">
                             <stop offset="0%" stopColor={ACCENT_GOLD} stopOpacity="0" />
@@ -176,7 +176,7 @@ const DailyNumberScreen: React.FC<DailyNumberScreenProps> = ({
                             key={i}
                             d={segmentPath(i)}
                             fill={`url(#segmentGrad-${i})`}
-                            stroke="rgba(201, 169, 110, 0.08)"
+                            stroke="rgba(37, 99, 235, 0.12)"
                             strokeWidth={0.25}
                           />
                         ))}
@@ -208,7 +208,7 @@ const DailyNumberScreen: React.FC<DailyNumberScreenProps> = ({
                               y1={inner.y}
                               x2={outer.x}
                               y2={outer.y}
-                              stroke="rgba(201, 169, 110, 0.38)"
+                              stroke="rgba(29, 78, 216, 0.45)"
                               strokeWidth={0.4}
                             />
                           );
@@ -286,7 +286,7 @@ const DailyNumberScreen: React.FC<DailyNumberScreenProps> = ({
                           cy={CY}
                           r={INNER_RING_R}
                           fill="none"
-                          stroke="rgba(201, 169, 110, 0.28)"
+                          stroke="rgba(37, 99, 235, 0.28)"
                           strokeWidth={0.45}
                         />
 
@@ -304,7 +304,7 @@ const DailyNumberScreen: React.FC<DailyNumberScreenProps> = ({
                               y={pos.y}
                               textAnchor="middle"
                               dominantBaseline="central"
-                              fill="rgba(232, 220, 192, 0.9)"
+                              fill="rgba(15, 23, 42, 0.75)"
                               fontSize="4.6"
                               fontWeight="600"
                               fontFamily="system-ui, -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif"
@@ -339,7 +339,7 @@ const DailyNumberScreen: React.FC<DailyNumberScreenProps> = ({
                             cy={CY}
                             r="4.5"
                             fill={ACCENT_GOLD}
-                            stroke="rgba(232, 220, 192, 0.85)"
+                            stroke="#ffffff"
                             strokeWidth="0.45"
                           />
                         </g>

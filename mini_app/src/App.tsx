@@ -352,21 +352,21 @@ function buildBirthCodeReport(birthDate: string): BirthCodeReport {
 const OUTER_RING_R = 47.8;
 const OUTER_RING_STROKE = 0.85;
 
-// Палитра: тёмно-синие градиенты, очень низкий контраст (плавные переходы)
+// Палитра секторов: светлые пастельные тона (в т.ч. голубые) под светлую тему
 const SEGMENT_GRADIENTS = [
-  { from: "#0d1629", to: "#0f182c" },
-  { from: "#0c1528", to: "#0e172b" },
-  { from: "#0d1629", to: "#0f182d" },
-  { from: "#0b132b", to: "#0d1629" },
-  { from: "#0c1528", to: "#0e172b" },
-  { from: "#0c1428", to: "#0e172b" },
-  { from: "#0b132b", to: "#0d1629" },
-  { from: "#0d1629", to: "#0f182c" },
-  { from: "#0c1529", to: "#0e172c" },
+  { from: "#f8fafc", to: "#e2e8f0" },
+  { from: "#eff6ff", to: "#dbeafe" },
+  { from: "#f0f9ff", to: "#e0f2fe" },
+  { from: "#eef2ff", to: "#e0e7ff" },
+  { from: "#f1f5f9", to: "#cbd5e1" },
+  { from: "#f8fafc", to: "#e2e8f0" },
+  { from: "#eff6ff", to: "#bfdbfe" },
+  { from: "#f0f9ff", to: "#bae6fd" },
+  { from: "#f8fafc", to: "#cbd5e1" },
 ];
 
-const NUMBER_COLOR = "#E8DCC0";
-const ACCENT_GOLD = "#C9A96E";
+const NUMBER_COLOR = "#0f172a";
+const ACCENT_GOLD = "#2563eb";
 
 // Мелкие тики компаса по внешнему кольцу (на границах секторов)
 const TICK_INNER_R = 46.2;

@@ -105,7 +105,7 @@ const MainMenuBottomAnimated: React.FC = () => {
         // Мерцание только через opacity; без движения и параллакса.
         const tw = 0.5 + 0.5 * Math.sin(t * 0.001 * s.speed + s.phase); // [0..1]
         const alpha = Math.max(0.3, Math.min(1, 0.3 + 0.7 * tw)) * s.baseAlpha;
-        ctx.fillStyle = `rgba(243, 234, 208, ${alpha.toFixed(3)})`;
+        ctx.fillStyle = `rgba(37, 99, 235, ${(alpha * 0.45).toFixed(3)})`;
         ctx.beginPath();
         ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
         ctx.fill();
