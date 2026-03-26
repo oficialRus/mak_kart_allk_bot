@@ -8,11 +8,11 @@
 }
 
 :root {
-  /* Минимализм: белый фон, спокойный синий акцент (ориентир — чистые продуктовые веб‑интерфейсы) */
-  --app-bg: #ffffff;
-  --app-bg-soft: #f9fafb;
-  --surface: #ffffff;
-  --surface-muted: #f9fafb;
+  /* Глобальный светло-голубой фон приложения */
+  --app-bg: #eef6ff;
+  --app-bg-soft: #e6f0ff;
+  --surface: #eaf3ff;
+  --surface-muted: #e3efff;
   --border: #e5e7eb;
   --border-soft: #e5e7eb;
   --accent: #2563eb;
@@ -36,7 +36,7 @@
   --btn-font-size: 0.9375rem;
   --btn-line-height: 1.3;
   --btn-min-height: 2.75rem;
-  --btn-border-outer: var(--btn-border-w) solid var(--border);
+  --btn-border-outer: var(--btn-border-w) solid rgba(37, 99, 235, 0.38);
   --btn-border-primary: var(--btn-border-w) solid var(--accent);
 
   font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
@@ -94,6 +94,7 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
+  padding-top: calc(3.9rem + max(0.35rem, env(safe-area-inset-top)));
   padding-bottom: calc(6rem + env(safe-area-inset-bottom));
 }
 
@@ -120,7 +121,7 @@ body {
 
 /* Логотип в `app-header` позиционируется абсолютом, поэтому отодвигаем контент внутри карточки */
 .page-inner--menu section.roulette-card.onboarding-card.roulette-card--stars {
-  padding-top: calc(1.5rem + 2.25rem);
+  padding-top: calc(1.5rem + 3.4rem);
 }
 
 .page-main {
@@ -178,7 +179,7 @@ body {
 
 .app-logo {
   display: block;
-  height: 36px;
+  height: 64px;
   width: auto;
   object-fit: contain;
 }
@@ -234,7 +235,7 @@ body {
 .main-menu-item {
   width: 100%;
   border-radius: var(--btn-radius);
-  border: var(--btn-border-outer);
+  border: 1px solid rgba(37, 99, 235, 0.38);
   background: var(--surface);
   color: var(--text);
   padding: var(--btn-pad-y) var(--btn-pad-x);
@@ -249,7 +250,7 @@ body {
 }
 
 .main-menu-item:hover {
-  background: var(--app-bg-soft);
+  background: var(--surface);
   border-color: var(--accent);
   box-shadow: none;
 }
@@ -544,6 +545,33 @@ body {
   white-space: pre-line;
 }
 
+.daily-affirmation-text {
+  width: 100%;
+  margin-top: 0.35rem;
+  padding: 0.95rem 1rem;
+  border-radius: var(--radius-md);
+  background: var(--accent-muted);
+  border: 1px solid rgba(37, 99, 235, 0.28);
+  color: var(--text);
+  font-size: 0.95rem;
+  line-height: 1.6;
+  white-space: pre-line;
+  text-align: left;
+}
+
+.daily-affirmation-text__title {
+  text-align: center;
+  color: #111111;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+}
+
+.daily-affirmation-text__body {
+  color: var(--text);
+  text-align: left;
+  white-space: pre-line;
+}
+
 .technique-scroll-hint {
   margin: 0.4rem 0 0;
   font-size: 0.78rem;
@@ -801,6 +829,11 @@ body {
   max-width: 420px;
 }
 
+.onboarding-subtitle--menu-accent {
+  color: var(--accent);
+  font-weight: 500;
+}
+
 .onboarding-form {
   width: 100%;
   display: grid;
@@ -849,6 +882,98 @@ body {
 .onboarding-error {
   font-size: 0.78rem;
   color: rgba(248, 113, 113, 0.95);
+}
+
+.cabinet-auth-card {
+  width: min(92vw, 560px);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+.cabinet-auth-card__logo {
+  width: 84px;
+  height: 84px;
+  margin: 2rem auto 1.1rem;
+  border-radius: 22px;
+  background: #e8ecff;
+  color: #4f46e5;
+  display: grid;
+  place-items: center;
+  font-size: 2.2rem;
+  font-weight: 700;
+}
+
+.cabinet-auth-card__title {
+  margin: 0;
+  text-align: center;
+  font-size: clamp(1.05rem, 3.6vw, 1.35rem);
+  color: rgba(71, 85, 105, 0.95);
+  padding: 0 1rem 1.2rem;
+}
+
+.cabinet-auth-card__providers {
+  display: grid;
+  gap: 0;
+  border-top: 1px solid var(--border);
+}
+
+.cabinet-auth-provider {
+  width: 100%;
+  min-height: 58px;
+  border: 0;
+  border-bottom: 1px solid rgba(37, 99, 235, 0.38);
+  background: var(--surface);
+  color: var(--text);
+  font-size: clamp(1rem, 3.5vw, 1.12rem);
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.8rem;
+}
+
+.cabinet-auth-provider:last-child {
+  border-bottom: 0;
+}
+
+.cabinet-auth-provider:hover {
+  background: var(--accent-muted);
+}
+
+.cabinet-auth-provider__icon {
+  width: 1.7rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.55rem;
+  line-height: 1;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.cabinet-auth-provider__icon--google {
+  color: #4285f4;
+}
+
+.cabinet-auth-provider__icon--yandex {
+  color: #fc3f1d;
+}
+
+.cabinet-auth-provider__icon--email {
+  color: #374151;
+  font-size: 1.35rem;
+}
+
+.cabinet-auth-card__terms {
+  margin: 0;
+  padding: 2.4rem 1rem 2rem;
+  text-align: center;
+  color: #94a3b8;
+  font-size: 0.8rem;
 }
 
 .wheel-area {
@@ -1011,6 +1136,25 @@ body {
   font-size: clamp(0.92rem, 3.6vw, 1.02rem);
 }
 
+.result-daily-message {
+  margin: 0.55rem 0 0;
+  padding: 0.7rem 0.8rem;
+  border-radius: var(--radius-md);
+  background: var(--accent-muted);
+  border: 1px solid rgba(37, 99, 235, 0.2);
+  color: var(--text);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.result-daily-message__label {
+  display: block;
+  margin: 0 0 0.35rem;
+  text-align: center;
+  font-weight: 700;
+  color: #111111;
+}
+
 /* Кнопки «Назад» и вторичные действия.
    Уникальный цвет (бирюзово‑сине‑зелёный), который больше нигде не используется,
    чтобы визуально отличать все возвратные действия от остальных кнопок. */
@@ -1092,11 +1236,11 @@ body {
 
 .bottom-nav-button {
   border-radius: 10px;
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--text-muted);
+  border: 1px solid rgba(37, 99, 235, 0.38);
+  background: var(--surface);
+  color: var(--text);
   font-size: 0.78rem;
-  font-weight: 500;
+  font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   padding: 0.45rem 0.6rem;
@@ -1110,7 +1254,7 @@ body {
 }
 
 .bottom-nav-button--primary {
-  border: var(--btn-border-outer);
+  border-color: rgba(37, 99, 235, 0.38);
   background: var(--surface);
 }
 
@@ -1137,15 +1281,15 @@ body {
   padding: var(--btn-pad-y) 0.35rem;
   min-height: var(--btn-min-height);
   background: var(--surface);
-  border: var(--btn-border-outer);
+  border: 1px solid rgba(37, 99, 235, 0.38);
   color: var(--text);
   font-size: 0.8125rem;
   font-weight: 600;
 }
 
 .bottom-nav-button:hover:not(:disabled):not(.bottom-nav-button--active) {
-  background: var(--surface-muted);
-  border-color: var(--border);
+  background: var(--surface);
+  border-color: var(--accent);
   color: var(--text);
 }
 
@@ -1284,9 +1428,9 @@ body {
   max-width: 100%;
   aspect-ratio: auto;
   border-radius: 0;
-  background: var(--surface-muted);
+  background: #dbeafe;
   border: none;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid rgba(37, 99, 235, 0.35);
   box-shadow: none;
   overflow: hidden;
 }
@@ -1312,7 +1456,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #ffffff;
+  background: var(--surface);
   padding: max(0.75rem, env(safe-area-inset-top)) max(0.75rem, env(safe-area-inset-right))
     max(0.75rem, env(safe-area-inset-bottom)) max(0.75rem, env(safe-area-inset-left));
   box-sizing: border-box;
@@ -1394,6 +1538,19 @@ body {
   line-height: 1.55;
   color: var(--text-muted);
   max-width: 36rem;
+}
+
+.onboarding-flow__list {
+  margin: 0;
+  padding-left: 1.15rem;
+  color: var(--text-muted);
+  font-size: clamp(0.92rem, 3.4vw, 1.02rem);
+  line-height: 1.5;
+  max-width: 36rem;
+}
+
+.onboarding-flow__list li + li {
+  margin-top: 0.3rem;
 }
 
 .onboarding-flow__dots {

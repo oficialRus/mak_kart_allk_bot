@@ -50,5 +50,5 @@
   font-size: 15px;
   letter-spacing: 0.02em;
   font-weight: 600;
-  color: var(--text-muted, #6b7280);
+  color: var(--text, #111827);
 }

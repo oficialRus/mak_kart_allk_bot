@@ -64,15 +64,17 @@ const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
   return (
     <main className="page">
       <header className="app-header">
-        <img src="/logo.png" alt="Гармония-Мак — Самопознание" className="app-logo" />
+        <img src="/api/card-image?name=logo.png" alt="Гармония-Мак — Самопознание" className="app-logo" />
       </header>
       <div className="page-inner page-inner--blue page-inner--menu">
         <section className="roulette-card onboarding-card roulette-card--stars">
             {learningView === "menu" && (
               <>
                 <CardStarAtmosphere className="main-menu-top-atmosphere" />
-                <h1 className="onboarding-title">Меню</h1>
-                <p className="onboarding-subtitle">Выберите раздел, с которого хотите начать.</p>
+                <h1 className="onboarding-title">Главное меню</h1>
+                <p className="onboarding-subtitle onboarding-subtitle--menu-accent">
+                  Выберите раздел, с которого хотите начать.
+                </p>
                 <div className="main-menu-list">
                   <button type="button" className="main-menu-item" onClick={onOpenDigitalPsychologist}>
                     ИИ психолог коуч
@@ -387,7 +389,7 @@ const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
         )}
         <nav className="bottom-nav">
           <button type="button" className="bottom-nav-button bottom-nav-button--primary" onClick={onOpenDaily}>
-            Цифра дня
+            ВАША ЦИФРА ДНЯ
           </button>
           <button
             type="button"

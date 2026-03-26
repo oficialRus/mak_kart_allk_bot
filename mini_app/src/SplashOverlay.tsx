@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 
-/** Совпадает с файлом в `public/splash-logo.png` (бренд-логотип при запуске). */
-export const SPLASH_LOGO_SRC = "/splash-logo.png";
+/** Бренд-логотип при запуске берём из серверной директории `data/cards/logo.png`. */
+export const SPLASH_LOGO_SRC = "/api/card-image?name=logo.png";
 
 const SPLASH_MIN_MS = 3000;
 

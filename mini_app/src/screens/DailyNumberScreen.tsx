@@ -90,7 +90,7 @@ const DailyNumberScreen: React.FC<DailyNumberScreenProps> = ({
   return (
     <main className="page">
       <header className="app-header">
-        <img src="/logo.png" alt="Гармония-Мак — Самопознание" className="app-logo" />
+        <img src="/api/card-image?name=logo.png" alt="Гармония-Мак — Самопознание" className="app-logo" />
       </header>
 
       <div className="page-inner">
@@ -355,10 +355,14 @@ const DailyNumberScreen: React.FC<DailyNumberScreenProps> = ({
                 <div className="result-text">
                   <p className="result-title">Ваша цифра дня: {resultNumber}</p>
                   <p className="result-description">
-                    {dailyMessage
-                      ? dailyMessage
-                      : `Описание: сегодня число ${resultNumber} подсказывает держать курс на приоритеты и не распыляться.`}
+                    {`Описание: сегодня число ${resultNumber} подсказывает держать курс на приоритеты и не распыляться.`}
                   </p>
+                  {dailyMessage && (
+                    <p className="result-daily-message">
+                      <span className="result-daily-message__label">Послание на день</span>
+                      {dailyMessage}
+                    </p>
+                  )}
                 </div>
               )}
               <button type="button" className="reset-link" onClick={onResetProfile}>
@@ -378,7 +382,7 @@ const DailyNumberScreen: React.FC<DailyNumberScreenProps> = ({
               // просто остаёмся на экране «Цифра дня»
             }}
           >
-            Цифра дня
+            ВАША ЦИФРА ДНЯ
           </button>
           <button
             type="button"

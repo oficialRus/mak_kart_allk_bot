@@ -17,7 +17,7 @@ const CabinetMenuScreen: React.FC<CabinetMenuScreenProps> = ({
   return (
     <main className="page">
       <header className="app-header">
-        <img src="/logo.png" alt="Гармония-Мак — Самопознание" className="app-logo" />
+        <img src="/api/card-image?name=logo.png" alt="Гармония-Мак — Самопознание" className="app-logo" />
       </header>
       <div className="page-inner page-inner--blue">
         <div className="page-main">
@@ -44,7 +44,7 @@ const CabinetMenuScreen: React.FC<CabinetMenuScreenProps> = ({
             }`}
             onClick={onOpenDaily}
           >
-            Цифра дня
+            ВАША ЦИФРА ДНЯ
           </button>
           <button
             type="button"

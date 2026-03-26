@@ -4,6 +4,7 @@ import MainMenuScreen from "./screens/MainMenuScreen";
 import CabinetMenuScreen from "./screens/CabinetMenuScreen";
 import DailyNumberScreen from "./screens/DailyNumberScreen";
 import MyReviewsScreen from "./screens/MyReviewsScreen";
+import CabinetAuthScreen from "./screens/CabinetAuthScreen";
 import CardStarAtmosphere from "./components/CardStarAtmosphere";
 
 const SECTOR_COUNT = 9;
@@ -125,11 +126,12 @@ type BirthCodeReport = {
   focusNow: string;
 };
 
-type AppScreen = "daily" | "menu" | "cabinet" | "aiCoach" | "reviews";
+type AppScreen = "daily" | "menu" | "cabinet" | "cabinetAuth" | "aiCoach" | "reviews";
 type DialogOrigin = "none" | "technique" | "cardDecode" | "cardDay" | "birthCode" | "review";
 
 const STORAGE_KEY_PROFILE = "garmonia_compass_profile_v1";
 const STORAGE_KEY_BIRTH_CODE_DRAFT = "garmonia_birth_code_draft_v1";
+const STORAGE_KEY_CABINET_AUTH = "garmonia_cabinet_auth_v1";
 
 /** Послание дня: API, описание карты, текст по названию или общий текст — чтобы блок не пропадал при пустых полях в БД или старом API. */
 function resolveCardDayMessage(raw: {
@@ -270,6 +272,49 @@ function getTodayKey() {
   }).format(new Date());
 }
 
+function getTodayMoscowRuDate() {
+  return new Intl.DateTimeFormat("ru-RU", {
+    timeZone: "Europe/Moscow",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
+const DAILY_AFFIRMATIONS = [
+  "Сегодня я выбираю движение вперёд с доверием к себе. Мои шаги спокойны, точны и приводят к лучшему результату.",
+  "Я в контакте со своей внутренней силой. Всё важное раскрывается в нужное время и в нужном темпе.",
+  "Я мягко отпускаю лишнее и сохраняю фокус на главном. Моя энергия работает на мои цели.",
+  "Я разрешаю себе расти без спешки и давления. Каждый мой шаг сегодня наполнен смыслом и уверенностью.",
+  "Я выбираю ясность мыслей и лёгкость действий. Всё, что мне нужно, уже внутри меня.",
+  "Я замечаю возможности и с благодарностью принимаю их. День поддерживает мои решения и усилия.",
+  "Я действую из состояния внутреннего баланса. Моя устойчивость помогает мне проходить любые перемены.",
+  "Я позволяю себе быть собой и проявляться свободно. Мир откликается на мою искренность и смелость.",
+  "Я в гармонии с собой, людьми и событиями дня. Всё складывается во благо и в верной последовательности.",
+  "Я выбираю заботу о себе как основу успеха. Из спокойствия рождаются лучшие идеи и правильные действия.",
+  "Сегодня я открыта(открыт) вдохновению и новым решениям. Я легко нахожу путь там, где раньше были сомнения.",
+  "Я доверяю своему пути и принимаю поддержку жизни. Мой день наполнен смыслом, ясностью и теплом.",
+  "Я уверенно и бережно иду к своим целям. Моя внутренняя опора крепнет с каждым шагом.",
+  "Я выбираю состояние благодарности и созидания. Этот день приносит мне нужные встречи и добрые перемены.",
+];
+
+function buildDailyAffirmationMessage() {
+  const todayKey = getTodayKey();
+  const idx = hashStringToIndex(`${todayKey}|garmonia_affirmation_v1`, DAILY_AFFIRMATIONS.length);
+  const text = DAILY_AFFIRMATIONS[idx];
+  const dateLabel = getTodayMoscowRuDate();
+  return `✨Аффирмация дня - ${dateLabel}✨\n\n«${text}»`;
+}
+
+function splitDailyAffirmationMessage(raw: string): { title: string; body: string } {
+  const parts = raw.split(/\n+/).map((v) => v.trim()).filter(Boolean);
+  if (parts.length === 0) return { title: "", body: "" };
+  return {
+    title: parts[0],
+    body: parts.slice(1).join("\n"),
+  };
+}
+
 function toRootNumber(value: number): number {
   let n = Math.abs(value);
   while (n > 9) {
@@ -391,6 +436,7 @@ export default function App() {
   const [showCompass, setShowCompass] = useState(false);
   const [showMainMenuScreen, setShowMainMenuScreen] = useState(false);
   const [showCabinetMenuScreen, setShowCabinetMenuScreen] = useState(false);
+  const [showCabinetAuthScreen, setShowCabinetAuthScreen] = useState(false);
   const [showAiCoachScreen, setShowAiCoachScreen] = useState(false);
   const [activeTab, setActiveTab] = useState<"daily" | "menu" | "cabinet">("daily");
   const [showTechniquesList, setShowTechniquesList] = useState(false);
@@ -413,6 +459,7 @@ export default function App() {
   const [navigationStack, setNavigationStack] = useState<AppScreen[]>(["daily"]);
   const [showCardDecodeScreen, setShowCardDecodeScreen] = useState(false);
   const [showCardDayScreen, setShowCardDayScreen] = useState(false);
+  const [showDailyAffirmationScreen, setShowDailyAffirmationScreen] = useState(false);
   const [cardDay, setCardDay] = useState<{ title: string; description: string; imagePath?: string; dayMessage?: string | null } | null>(null);
   const [cardDayLoading, setCardDayLoading] = useState(false);
   const [cardDayError, setCardDayError] = useState<string | null>(null);
@@ -432,6 +479,7 @@ export default function App() {
   const dialogHistoryRef = useRef<HTMLDivElement | null>(null);
   const [isDialogInputFocused, setIsDialogInputFocused] = useState(false);
   const [clearDialogInputOnFocus, setClearDialogInputOnFocus] = useState(false);
+  const [isCabinetAuthorized, setIsCabinetAuthorized] = useState(false);
 
   const selectedTechniqueForDialog =
     selectedTechniqueId != null ? TECHNIQUES.find((t) => t.id === selectedTechniqueId) ?? null : null;
@@ -439,6 +487,7 @@ export default function App() {
   const activateScreen = (screen: AppScreen) => {
     setShowMainMenuScreen(screen === "menu");
     setShowCabinetMenuScreen(screen === "cabinet");
+    setShowCabinetAuthScreen(screen === "cabinetAuth");
     setShowAiCoachScreen(screen === "aiCoach");
     setShowMyReviewsScreen(screen === "reviews");
     setShowCompass(screen === "daily");
@@ -454,6 +503,10 @@ export default function App() {
   const pushScreen = (screen: AppScreen) => {
     setNavigationStack((prev) => [...prev, screen]);
     activateScreen(screen);
+  };
+
+  const openCabinetFlow = () => {
+    pushScreen(isCabinetAuthorized ? "cabinet" : "cabinetAuth");
   };
 
   const resetToMainMenu = () => {
@@ -568,6 +621,10 @@ export default function App() {
       setShowCardDayScreen(false);
       return;
     }
+    if (showDailyAffirmationScreen) {
+      setShowDailyAffirmationScreen(false);
+      return;
+    }
     if (birthCodeReport) {
       setBirthCodeReport(null);
       setBirthCodeContext(null);
@@ -585,6 +642,12 @@ export default function App() {
     }
     goBack();
   };
+
+  useEffect(() => {
+    if (!showAiCoachScreen) {
+      setShowDailyAffirmationScreen(false);
+    }
+  }, [showAiCoachScreen]);
 
   const renderDialogText = (text: string) => {
     // Сохраняем переносы строк и визуально выделяем "Шаг N".
@@ -925,9 +988,19 @@ export default function App() {
     }
   }, [birthCodeForm, showBirthCodeIntro]);
 
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(STORAGE_KEY_CABINET_AUTH);
+      setIsCabinetAuthorized(raw === "1");
+    } catch {
+      setIsCabinetAuthorized(false);
+    }
+  }, []);
+
   const handleResetProfile = () => {
     try {
       window.localStorage.removeItem(STORAGE_KEY_PROFILE);
+      window.localStorage.removeItem(STORAGE_KEY_CABINET_AUTH);
     } catch {
       // ignore
     }
@@ -938,6 +1011,7 @@ export default function App() {
     setHasResult(false);
     setDailyMessage(null);
     setRotation(0);
+    setIsCabinetAuthorized(false);
   };
 
   const resultNumber = winningIndex === null ? "-" : winningIndex + 1;
@@ -1175,7 +1249,7 @@ export default function App() {
     return (
       <main className="page">
         <header className="app-header">
-          <img src="/logo.png" alt="Гармония-Мак — Самопознание" className="app-logo" />
+          <img src="/api/card-image?name=logo.png" alt="Гармония-Мак — Самопознание" className="app-logo" />
         </header>
 
         <div className="page-inner">
@@ -1183,8 +1257,9 @@ export default function App() {
             <section className="roulette-card onboarding-card">
               <h1 className="onboarding-title">Добро пожаловать</h1>
               <p className="onboarding-subtitle">
-                Нажмите «Начать», чтобы войти в приложение. Имя и дата рождения понадобятся только в разделе разбора по
-                дате рождения — мы не сохраняем их как «профиль» в кабинете.
+                Нажмите «Начать», чтобы войти в приложение.
+                По вашему желанию вы можете указать имя и дату рождения — это потребуется только для разбора и не
+                сохраняется в профиле.
               </p>
               <form className="onboarding-form" onSubmit={handleProfileSubmit}>
                 <button type="submit" className="spin-button" disabled={isRegisterSubmitting}>
@@ -1206,7 +1281,7 @@ export default function App() {
     return (
       <main className="page">
         <header className="app-header">
-          <img src="/logo.png" alt="Гармония-Мак — Самопознание" className="app-logo" />
+          <img src="/api/card-image?name=logo.png" alt="Гармония-Мак — Самопознание" className="app-logo" />
         </header>
         <div className="page-inner page-inner--blue">
           <div className="page-main">
@@ -2173,6 +2248,24 @@ export default function App() {
                     </>
                   )}
                 </>
+              ) : showDailyAffirmationScreen ? (
+                <>
+                  <h2 className="technique-title">Аффирмация дня</h2>
+                  <div className="daily-affirmation-text">
+                    {(() => {
+                      const { title, body } = splitDailyAffirmationMessage(buildDailyAffirmationMessage());
+                      return (
+                        <>
+                          <div className="daily-affirmation-text__title">{title}</div>
+                          <div className="daily-affirmation-text__body">{body}</div>
+                        </>
+                      );
+                    })()}
+                  </div>
+                  <button type="button" className="secondary-button" onClick={() => setShowDailyAffirmationScreen(false)}>
+                    Назад
+                  </button>
+                </>
               ) : (
                 <>
                   <p className="onboarding-subtitle">Выберите формат работы, который вам нужен сейчас.</p>
@@ -2181,6 +2274,7 @@ export default function App() {
                       type="button"
                       className="main-menu-item"
                       onClick={() => {
+                        setShowDailyAffirmationScreen(false);
                         setShowTechniquesList(true);
                         setSelectedTechniqueId(null);
                       }}
@@ -2191,6 +2285,7 @@ export default function App() {
                       type="button"
                       className="main-menu-item"
                       onClick={() => {
+                        setShowDailyAffirmationScreen(false);
                         setShowCardDecodeScreen(true);
                         setShowDialogScreen(false);
                         setShowTechniquesList(false);
@@ -2203,6 +2298,7 @@ export default function App() {
                       type="button"
                       className="main-menu-item"
                       onClick={() => {
+                        setShowDailyAffirmationScreen(false);
                         setShowCardDayScreen(true);
                         setShowCardDecodeScreen(false);
                         setShowDialogScreen(false);
@@ -2264,7 +2360,35 @@ export default function App() {
                     >
                       Карта дня
                     </button>
-                    <button type="button" className="main-menu-item" onClick={openBirthCodeFlow}>
+                    <button
+                      type="button"
+                      className="main-menu-item"
+                      onClick={() => {
+                        setShowDailyAffirmationScreen(true);
+                        setShowDialogScreen(false);
+                        setShowTechniqueDialogMenu(false);
+                        setShowCardDecodeScreen(false);
+                        setShowCardDayScreen(false);
+                        setShowTechniquesList(false);
+                        setSelectedTechniqueId(null);
+                        setDialogOrigin("none");
+                        setDialogAllowImage(false);
+                        setDialogError(null);
+                        setDialogLoading(false);
+                        setDialogInput("");
+                        setDialogMessages([]);
+                      }}
+                    >
+                      Аффирмация дня
+                    </button>
+                    <button
+                      type="button"
+                      className="main-menu-item"
+                      onClick={() => {
+                        setShowDailyAffirmationScreen(false);
+                        openBirthCodeFlow();
+                      }}
+                    >
                       Ваш психологический код по дате рождения
                     </button>
                   </div>
@@ -2298,7 +2422,7 @@ export default function App() {
                 setBirthCodeReport(null);
               }}
             >
-              Цифра дня
+              ВАША ЦИФРА ДНЯ
             </button>
             <button
               type="button"
@@ -2316,7 +2440,7 @@ export default function App() {
               type="button"
               className={`bottom-nav-button bottom-nav-button--primary ${activeTab === "cabinet" ? "bottom-nav-button--active" : ""}`}
               onClick={() => {
-                pushScreen("cabinet");
+                openCabinetFlow();
                 setShowBirthCodeIntro(false);
                 setShowBirthCodeLoading(false);
                 setBirthCodeReport(null);
@@ -2353,7 +2477,7 @@ export default function App() {
           pushScreen("aiCoach");
         }}
         onOpenCabinet={() => {
-          pushScreen("cabinet");
+          openCabinetFlow();
         }}
         onOpenDigitalPsychologist={() => {
           pushScreen("aiCoach");
@@ -2370,6 +2494,31 @@ export default function App() {
         }}
         learningSurvey={learningSurvey}
         onSaveLearningSurvey={handleSaveLearningSurvey}
+      />
+    );
+  }
+
+  if (showCabinetAuthScreen) {
+    return (
+      <CabinetAuthScreen
+        onOpenDaily={() => {
+          pushScreen("daily");
+        }}
+        onOpenMenu={() => {
+          pushScreen("menu");
+        }}
+        onOpenCabinet={() => {
+          openCabinetFlow();
+        }}
+        onRegister={() => {
+          try {
+            window.localStorage.setItem(STORAGE_KEY_CABINET_AUTH, "1");
+          } catch {
+            // ignore
+          }
+          setIsCabinetAuthorized(true);
+          pushScreen("cabinet");
+        }}
       />
     );
   }
@@ -2407,7 +2556,7 @@ export default function App() {
         pushScreen("menu");
       }}
       onOpenCabinet={() => {
-        pushScreen("cabinet");
+        openCabinetFlow();
       }}
       onOpenBirthSpreadModal={() => setShowBirthSpreadModal(true)}
       onCloseBirthSpreadModal={() => setShowBirthSpreadModal(false)}
