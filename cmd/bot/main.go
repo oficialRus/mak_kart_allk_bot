@@ -37,6 +37,12 @@ func main() {
 	if err := db.EnsureProfileTable(context.Background()); err != nil {
 		log.Fatalf("db ensure profile table: %v", err)
 	}
+	if err := db.EnsureEmailVerificationTables(context.Background()); err != nil {
+		log.Fatalf("db ensure email verification tables: %v", err)
+	}
+	if err := db.EnsureCabinetAuthSessionsTable(context.Background()); err != nil {
+		log.Fatalf("db ensure cabinet auth sessions: %v", err)
+	}
 	if err := db.EnsureDailyNumberTable(context.Background()); err != nil {
 		log.Fatalf("db ensure daily numbers table: %v", err)
 	}
@@ -62,9 +68,15 @@ func main() {
 	if apiPort == "" {
 		apiPort = "8080"
 	}
+	emailVerifySvc := api.NewEmailVerifyService()
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/profile", api.ProfileHandler(token))
 	mux.HandleFunc("/api/profile-get", api.ProfileGetHandler(token))
+	mux.HandleFunc("/api/auth/email/send-code", api.EmailSendCodeHandler(token, emailVerifySvc))
+	mux.HandleFunc("/api/auth/email/verify-code", api.EmailVerifyCodeHandler(token, emailVerifySvc))
+	mux.HandleFunc("/api/auth/cabinet/validate-session", api.CabinetValidateSessionHandler())
+	mux.HandleFunc("/api/auth/cabinet/logout", api.CabinetLogoutHandler())
 	mux.HandleFunc("/api/daily-number", api.DailyNumberHandler(token))
 	mux.HandleFunc("/api/open-cabinet", api.CabinetOpenHandler(token))
 	mux.HandleFunc("/api/open-main-menu", api.MainMenuOpenHandler(token))

@@ -5,6 +5,7 @@ type CabinetMenuScreenProps = {
   onOpenDaily: () => void;
   onOpenMenu: () => void;
   onOpenMyReviews: () => void;
+  onLogout: () => void;
   activeTab: "daily" | "menu" | "cabinet";
 };
 
@@ -12,6 +13,7 @@ const CabinetMenuScreen: React.FC<CabinetMenuScreenProps> = ({
   onOpenDaily,
   onOpenMenu,
   onOpenMyReviews,
+  onLogout,
   activeTab,
 }) => {
   return (
@@ -28,6 +30,9 @@ const CabinetMenuScreen: React.FC<CabinetMenuScreenProps> = ({
             <div className="main-menu-list">
               <button type="button" className="main-menu-item" onClick={onOpenMyReviews}>
                 Мои разборы
+              </button>
+              <button type="button" className="main-menu-item main-menu-item--logout" onClick={onLogout}>
+                Выйти
               </button>
             </div>
             <p className="technique-body" style={{ marginTop: "0.75rem", fontSize: "0.88rem", color: "var(--text-muted)" }}>

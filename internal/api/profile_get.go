@@ -22,6 +22,8 @@ type ProfileGetResponse struct {
 	LearningLevel  string `json:"learningLevel"`
 	LearningGoal   string `json:"learningGoal"`
 	LearningFormat string `json:"learningFormat"`
+	Email          string `json:"email"`
+	EmailVerified  bool   `json:"emailVerified"`
 }
 
 // ProfileGetHandler обрабатывает POST /api/profile-get:
@@ -69,6 +71,8 @@ func ProfileGetHandler(botToken string) http.HandlerFunc {
 			LearningLevel:  profile.LearningLevel,
 			LearningGoal:   profile.LearningGoal,
 			LearningFormat: profile.LearningFormat,
+			Email:          profile.Email,
+			EmailVerified:  profile.EmailVerifiedAt != nil && profile.Email != "",
 		}
 
 		w.Header().Set("Content-Type", "application/json")

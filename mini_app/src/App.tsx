@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { expandViewport, requestFullscreen } from "@telegram-apps/sdk";
 import MainMenuScreen from "./screens/MainMenuScreen";
 import CabinetMenuScreen from "./screens/CabinetMenuScreen";
@@ -6,6 +6,15 @@ import DailyNumberScreen from "./screens/DailyNumberScreen";
 import MyReviewsScreen from "./screens/MyReviewsScreen";
 import CabinetAuthScreen from "./screens/CabinetAuthScreen";
 import CardStarAtmosphere from "./components/CardStarAtmosphere";
+import { getDailyHoroscopeBlocks } from "./horoscope/dailyHoroscope";
+import {
+  clearCabinetSessionStorage,
+  initialCabinetAuthorizedFromStorage,
+  parseCabinetAuthStored,
+  saveCabinetLegacyAuthFlag,
+  saveCabinetSession,
+  validateCabinetSessionOnServer,
+} from "./cabinetSession";
 
 const SECTOR_COUNT = 9;
 const SECTOR_ANGLE = 360 / SECTOR_COUNT; // 40°
@@ -460,6 +469,7 @@ export default function App() {
   const [showCardDecodeScreen, setShowCardDecodeScreen] = useState(false);
   const [showCardDayScreen, setShowCardDayScreen] = useState(false);
   const [showDailyAffirmationScreen, setShowDailyAffirmationScreen] = useState(false);
+  const [showHoroscopeScreen, setShowHoroscopeScreen] = useState(false);
   const [cardDay, setCardDay] = useState<{ title: string; description: string; imagePath?: string; dayMessage?: string | null } | null>(null);
   const [cardDayLoading, setCardDayLoading] = useState(false);
   const [cardDayError, setCardDayError] = useState<string | null>(null);
@@ -479,7 +489,25 @@ export default function App() {
   const dialogHistoryRef = useRef<HTMLDivElement | null>(null);
   const [isDialogInputFocused, setIsDialogInputFocused] = useState(false);
   const [clearDialogInputOnFocus, setClearDialogInputOnFocus] = useState(false);
-  const [isCabinetAuthorized, setIsCabinetAuthorized] = useState(false);
+  const [isCabinetAuthorized, setIsCabinetAuthorized] = useState(initialCabinetAuthorizedFromStorage);
+
+  useEffect(() => {
+    const s = parseCabinetAuthStored();
+    if (s.kind !== "session") return;
+    const apiBase = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
+    void (async () => {
+      const ok = await validateCabinetSessionOnServer(apiBase, s.token);
+      if (!ok) {
+        clearCabinetSessionStorage();
+        setIsCabinetAuthorized(false);
+      }
+    })();
+  }, []);
+
+  const horoscopeBlocks = useMemo(() => {
+    if (!showHoroscopeScreen) return [];
+    return getDailyHoroscopeBlocks(new Date());
+  }, [showHoroscopeScreen]);
 
   const selectedTechniqueForDialog =
     selectedTechniqueId != null ? TECHNIQUES.find((t) => t.id === selectedTechniqueId) ?? null : null;
@@ -509,6 +537,38 @@ export default function App() {
     pushScreen(isCabinetAuthorized ? "cabinet" : "cabinetAuth");
   };
 
+  /** Выход из кабинета: отзыв сессии на сервере, очистка localStorage, экран ввода email — приложение не закрываем. */
+  const handleCabinetLogout = () => {
+    void (async () => {
+      const s = parseCabinetAuthStored();
+      if (s.kind === "session") {
+        const apiBase = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
+        if (apiBase) {
+          try {
+            await fetch(`${apiBase}/api/auth/cabinet/logout`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ sessionToken: s.token }),
+            });
+          } catch {
+            // сеть: всё равно чистим клиент
+          }
+        }
+      }
+      clearCabinetSessionStorage();
+      setIsCabinetAuthorized(false);
+      setNavigationStack((prev) => {
+        const next = [...prev];
+        while (next.length > 0 && (next[next.length - 1] === "reviews" || next[next.length - 1] === "cabinet")) {
+          next.pop();
+        }
+        next.push("cabinetAuth");
+        activateScreen("cabinetAuth");
+        return next;
+      });
+    })();
+  };
+
   const resetToMainMenu = () => {
     setNavigationStack(["menu"]);
     activateScreen("menu");
@@ -523,6 +583,8 @@ export default function App() {
     setShowTechniqueDialogMenu(false);
     setDialogFromReview(false);
     setDialogOrigin("none");
+    setShowHoroscopeScreen(false);
+    setShowDailyAffirmationScreen(false);
   };
 
   const goBack = () => {
@@ -621,6 +683,10 @@ export default function App() {
       setShowCardDayScreen(false);
       return;
     }
+    if (showHoroscopeScreen) {
+      setShowHoroscopeScreen(false);
+      return;
+    }
     if (showDailyAffirmationScreen) {
       setShowDailyAffirmationScreen(false);
       return;
@@ -646,6 +712,7 @@ export default function App() {
   useEffect(() => {
     if (!showAiCoachScreen) {
       setShowDailyAffirmationScreen(false);
+      setShowHoroscopeScreen(false);
     }
   }, [showAiCoachScreen]);
 
@@ -988,19 +1055,10 @@ export default function App() {
     }
   }, [birthCodeForm, showBirthCodeIntro]);
 
-  useEffect(() => {
-    try {
-      const raw = window.localStorage.getItem(STORAGE_KEY_CABINET_AUTH);
-      setIsCabinetAuthorized(raw === "1");
-    } catch {
-      setIsCabinetAuthorized(false);
-    }
-  }, []);
-
   const handleResetProfile = () => {
     try {
       window.localStorage.removeItem(STORAGE_KEY_PROFILE);
-      window.localStorage.removeItem(STORAGE_KEY_CABINET_AUTH);
+      clearCabinetSessionStorage();
     } catch {
       // ignore
     }
@@ -1271,6 +1329,54 @@ export default function App() {
 
         </div>
       </main>
+    );
+  }
+
+  if (showCabinetAuthScreen) {
+    return (
+      <CabinetAuthScreen
+        onOpenDaily={() => {
+          pushScreen("daily");
+        }}
+        onOpenMenu={() => {
+          pushScreen("menu");
+        }}
+        onOpenCabinet={() => {
+          openCabinetFlow();
+        }}
+        onCabinetEmailVerified={(session) => {
+          if (session) {
+            saveCabinetSession(session.token, session.expiresAt);
+          } else {
+            try {
+              saveCabinetLegacyAuthFlag();
+            } catch {
+              // ignore
+            }
+          }
+          setIsCabinetAuthorized(true);
+          pushScreen("cabinet");
+        }}
+      />
+    );
+  }
+
+  if (showCabinetMenuScreen) {
+    return (
+      <CabinetMenuScreen
+        onOpenDaily={() => {
+          pushScreen("daily");
+        }}
+        onOpenMenu={() => {
+          pushScreen("menu");
+        }}
+        onOpenMyReviews={() => {
+          pushScreen("reviews");
+          void handleLoadReviews();
+        }}
+        onLogout={handleCabinetLogout}
+        activeTab={activeTab}
+      />
     );
   }
 
@@ -2248,6 +2354,24 @@ export default function App() {
                     </>
                   )}
                 </>
+              ) : showHoroscopeScreen ? (
+                <>
+                  <h2 className="technique-title">Гороскоп на сегодня</h2>
+                  <p className="onboarding-subtitle horoscope-subtitle">
+                    Тексты обновляются каждый календарный день по дате на вашем устройстве.
+                  </p>
+                  <div className="horoscope-list">
+                    {horoscopeBlocks.map((block) => (
+                      <article key={block.name} className="horoscope-card">
+                        <h3 className="horoscope-card__headline">{block.headline}</h3>
+                        <p className="horoscope-card__text">{block.text}</p>
+                      </article>
+                    ))}
+                  </div>
+                  <button type="button" className="secondary-button" onClick={() => setShowHoroscopeScreen(false)}>
+                    Назад
+                  </button>
+                </>
               ) : showDailyAffirmationScreen ? (
                 <>
                   <h2 className="technique-title">Аффирмация дня</h2>
@@ -2275,6 +2399,7 @@ export default function App() {
                       className="main-menu-item"
                       onClick={() => {
                         setShowDailyAffirmationScreen(false);
+                        setShowHoroscopeScreen(false);
                         setShowTechniquesList(true);
                         setSelectedTechniqueId(null);
                       }}
@@ -2286,6 +2411,7 @@ export default function App() {
                       className="main-menu-item"
                       onClick={() => {
                         setShowDailyAffirmationScreen(false);
+                        setShowHoroscopeScreen(false);
                         setShowCardDecodeScreen(true);
                         setShowDialogScreen(false);
                         setShowTechniquesList(false);
@@ -2299,6 +2425,7 @@ export default function App() {
                       className="main-menu-item"
                       onClick={() => {
                         setShowDailyAffirmationScreen(false);
+                        setShowHoroscopeScreen(false);
                         setShowCardDayScreen(true);
                         setShowCardDecodeScreen(false);
                         setShowDialogScreen(false);
@@ -2365,6 +2492,7 @@ export default function App() {
                       className="main-menu-item"
                       onClick={() => {
                         setShowDailyAffirmationScreen(true);
+                        setShowHoroscopeScreen(false);
                         setShowDialogScreen(false);
                         setShowTechniqueDialogMenu(false);
                         setShowCardDecodeScreen(false);
@@ -2385,7 +2513,30 @@ export default function App() {
                       type="button"
                       className="main-menu-item"
                       onClick={() => {
+                        setShowHoroscopeScreen(true);
                         setShowDailyAffirmationScreen(false);
+                        setShowDialogScreen(false);
+                        setShowTechniqueDialogMenu(false);
+                        setShowCardDecodeScreen(false);
+                        setShowCardDayScreen(false);
+                        setShowTechniquesList(false);
+                        setSelectedTechniqueId(null);
+                        setDialogOrigin("none");
+                        setDialogAllowImage(false);
+                        setDialogError(null);
+                        setDialogLoading(false);
+                        setDialogInput("");
+                        setDialogMessages([]);
+                      }}
+                    >
+                      Гороскоп
+                    </button>
+                    <button
+                      type="button"
+                      className="main-menu-item"
+                      onClick={() => {
+                        setShowDailyAffirmationScreen(false);
+                        setShowHoroscopeScreen(false);
                         openBirthCodeFlow();
                       }}
                     >
@@ -2494,49 +2645,6 @@ export default function App() {
         }}
         learningSurvey={learningSurvey}
         onSaveLearningSurvey={handleSaveLearningSurvey}
-      />
-    );
-  }
-
-  if (showCabinetAuthScreen) {
-    return (
-      <CabinetAuthScreen
-        onOpenDaily={() => {
-          pushScreen("daily");
-        }}
-        onOpenMenu={() => {
-          pushScreen("menu");
-        }}
-        onOpenCabinet={() => {
-          openCabinetFlow();
-        }}
-        onRegister={() => {
-          try {
-            window.localStorage.setItem(STORAGE_KEY_CABINET_AUTH, "1");
-          } catch {
-            // ignore
-          }
-          setIsCabinetAuthorized(true);
-          pushScreen("cabinet");
-        }}
-      />
-    );
-  }
-
-  if (showCabinetMenuScreen) {
-    return (
-      <CabinetMenuScreen
-        onOpenDaily={() => {
-          pushScreen("daily");
-        }}
-        onOpenMenu={() => {
-          pushScreen("menu");
-        }}
-        onOpenMyReviews={() => {
-          pushScreen("reviews");
-          void handleLoadReviews();
-        }}
-        activeTab={activeTab}
       />
     );
   }

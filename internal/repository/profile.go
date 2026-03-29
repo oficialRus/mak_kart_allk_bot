@@ -17,6 +17,8 @@ type Profile struct {
 	LearningLevel  string
 	LearningGoal   string
 	LearningFormat string
+	Email            string
+	EmailVerifiedAt  *time.Time
 	CreatedAt  time.Time
 	UpdatedAt  time.Time
 }
@@ -24,7 +26,8 @@ type Profile struct {
 // GetProfile возвращает профиль пользователя по telegram_id или nil, если записи нет.
 func GetProfile(ctx context.Context, telegramID int64) (*Profile, error) {
 	q := `
-	SELECT telegram_id, full_name, birth_date, phone, learning_level, learning_goal, learning_format, created_at, updated_at
+	SELECT telegram_id, full_name, birth_date, phone, learning_level, learning_goal, learning_format,
+	       COALESCE(email, ''), email_verified_at, created_at, updated_at
 	FROM mini_app_profiles
 	WHERE telegram_id = $1;
 	`
@@ -39,6 +42,8 @@ func GetProfile(ctx context.Context, telegramID int64) (*Profile, error) {
 		&p.LearningLevel,
 		&p.LearningGoal,
 		&p.LearningFormat,
+		&p.Email,
+		&p.EmailVerifiedAt,
 		&p.CreatedAt,
 		&p.UpdatedAt,
 	); err != nil {
@@ -67,4 +72,41 @@ func SaveProfile(ctx context.Context, telegramID int64, fullName, birthDate, pho
 	`
 	_, err := db.Pool.ExecContext(ctx, q, telegramID, fullName, birthDate, phone, learningLevel, learningGoal, learningFormat)
 	return err
+}
+
+// SetVerifiedEmail сохраняет подтверждённый email у пользователя Telegram.
+// Ожидается нормализованный email (нижний регистр, trim).
+// Если строки профиля ещё нет, создаётся минимальная запись (как при отложенном онбординге).
+func SetVerifiedEmail(ctx context.Context, telegramID int64, emailNormalized string) error {
+	q := `
+	INSERT INTO mini_app_profiles (telegram_id, full_name, birth_date, phone, learning_level, learning_goal, learning_format, email, email_verified_at)
+	VALUES ($1, '', '', '', '', '', '', $2, NOW())
+	ON CONFLICT (telegram_id) DO UPDATE SET
+		email = EXCLUDED.email,
+		email_verified_at = EXCLUDED.email_verified_at,
+		updated_at = NOW();
+	`
+	_, err := db.Pool.ExecContext(ctx, q, telegramID, emailNormalized)
+	return err
+}
+
+// VerifiedEmailOwner возвращает telegram_id владельца этого подтверждённого email, если он есть (кроме excludeTelegramID).
+func VerifiedEmailOwner(ctx context.Context, emailNormalized string, excludeTelegramID int64) (int64, bool, error) {
+	q := `
+	SELECT telegram_id FROM mini_app_profiles
+	WHERE lower(trim(email)) = $1
+	  AND email_verified_at IS NOT NULL
+	  AND trim(email) <> ''
+	  AND telegram_id <> $2
+	LIMIT 1;
+	`
+	var owner int64
+	err := db.Pool.QueryRowContext(ctx, q, emailNormalized, excludeTelegramID).Scan(&owner)
+	if err == sql.ErrNoRows {
+		return 0, false, nil
+	}
+	if err != nil {
+		return 0, false, err
+	}
+	return owner, true, nil
 }
