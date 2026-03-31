@@ -464,6 +464,8 @@ export default function App() {
   const [isTechniqueRunFinished, setIsTechniqueRunFinished] = useState(false);
   const [showAskNextOptions, setShowAskNextOptions] = useState(false);
   const [learningSurvey, setLearningSurvey] = useState<LearningSurvey | null>(null);
+  const [pendingOpenLearningAfterAuth, setPendingOpenLearningAfterAuth] = useState(false);
+  const [openLearningOnNextMenu, setOpenLearningOnNextMenu] = useState(false);
   const [dialogOrigin, setDialogOrigin] = useState<DialogOrigin>("none");
   const [navigationStack, setNavigationStack] = useState<AppScreen[]>(["daily"]);
   const [showCardDecodeScreen, setShowCardDecodeScreen] = useState(false);
@@ -535,6 +537,11 @@ export default function App() {
 
   const openCabinetFlow = () => {
     pushScreen(isCabinetAuthorized ? "cabinet" : "cabinetAuth");
+  };
+
+  const openLearningFlowWithAuth = () => {
+    setPendingOpenLearningAfterAuth(true);
+    pushScreen("cabinetAuth");
   };
 
   /** Выход из кабинета: отзыв сессии на сервере, очистка localStorage, экран ввода email — приложение не закрываем. */
@@ -1355,6 +1362,12 @@ export default function App() {
             }
           }
           setIsCabinetAuthorized(true);
+          if (pendingOpenLearningAfterAuth) {
+            setPendingOpenLearningAfterAuth(false);
+            setOpenLearningOnNextMenu(true);
+            pushScreen("menu");
+            return;
+          }
           pushScreen("cabinet");
         }}
       />
@@ -2626,6 +2639,13 @@ export default function App() {
         }}
         onOpenAiCoach={() => {
           pushScreen("aiCoach");
+        }}
+        onOpenLearning={() => {
+          openLearningFlowWithAuth();
+        }}
+        autoOpenLearning={openLearningOnNextMenu}
+        onLearningAutoOpened={() => {
+          setOpenLearningOnNextMenu(false);
         }}
         onOpenCabinet={() => {
           openCabinetFlow();

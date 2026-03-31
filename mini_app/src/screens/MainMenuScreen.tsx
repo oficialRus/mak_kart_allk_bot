@@ -7,6 +7,9 @@ type MainMenuScreenProps = {
   onOpenAiCoach: () => void;
   onOpenCabinet: () => void;
   onOpenDigitalPsychologist: () => void;
+  onOpenLearning: () => void;
+  autoOpenLearning: boolean;
+  onLearningAutoOpened: () => void;
   learningSurvey: {
     level: SurveyLevel;
     goal: SurveyGoal;
@@ -26,6 +29,9 @@ const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
   onOpenAiCoach,
   onOpenCabinet,
   onOpenDigitalPsychologist,
+  onOpenLearning,
+  autoOpenLearning,
+  onLearningAutoOpened,
   learningSurvey,
   onSaveLearningSurvey,
 }) => {
@@ -45,6 +51,13 @@ const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
     setSurveyGoal(learningSurvey?.goal ?? null);
     setSurveyFormat(learningSurvey?.format ?? null);
   }, [learningSurvey]);
+
+  useEffect(() => {
+    if (!autoOpenLearning) return;
+    setSurveySaveError(null);
+    setLearningView(hasSavedSurvey ? "afterSurvey" : "intro");
+    onLearningAutoOpened();
+  }, [autoOpenLearning, hasSavedSurvey, onLearningAutoOpened]);
 
   const resetLearning = () => {
     setLearningView("menu");
@@ -85,10 +98,7 @@ const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
                   <button
                     type="button"
                     className="main-menu-item"
-                    onClick={() => {
-                      setSurveySaveError(null);
-                      setLearningView(hasSavedSurvey ? "afterSurvey" : "intro");
-                    }}
+                    onClick={onOpenLearning}
                   >
                     Обучение
                   </button>
