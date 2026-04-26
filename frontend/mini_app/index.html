@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#0f172a" />
+    <title>ГАРМОНИЯ-МАК</title>
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="preload" href="/api/card-image?name=logo.png" as="image" />
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script>
+      (function() {
+        function expand() {
+          var w = window.Telegram && window.Telegram.WebApp;
+          if (w) {
+            w.ready();
+            if (!w.isExpanded) w.expand();
+            if (w.requestFullscreen) w.requestFullscreen();
+          }
+        }
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', expand);
+        } else {
+          expand();
+        }
+        window.addEventListener('load', expand);
+
+        // Жёстко отключаем увеличение/масштабирование на мобильных
+        var lastTouchEnd = 0;
+        document.addEventListener(
+          'touchstart',
+          function (event) {
+            if (event.touches.length > 1) {
+              event.preventDefault();
+            }
+          },
+          { passive: false }
+        );
+        document.addEventListener(
+          'touchend',
+          function (event) {
+            var now = new Date().getTime();
+            if (now - lastTouchEnd <= 300) {
+              event.preventDefault();
+            }
+            lastTouchEnd = now;
+          },
+          { passive: false }
+        );
+        document.addEventListener(
+          'gesturestart',
+          function (event) {
+            event.preventDefault();
+          },
+          { passive: false }
+        );
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

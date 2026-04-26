@@ -1,0 +1,488 @@
+Цель миграции
+=============
+
+Сделать приложение полноценной PWA, независимой от Telegram, сохранив весь
+текущий функционал. Telegram остаётся как ОПЦИОНАЛЬНЫЙ провайдер входа и
+канал коммуникации (не обязательный). Миграция — без даунтайма и без
+потери данных существующих пользователей (в т.ч. уже подтверждённых
+email).
+
+
+ВАЖНО: что в проекте УЖЕ сделано (учитывать в плане)
+====================================================
+
+1. В коде уже есть синтетический user_id для браузеров без Telegram:
+   internal/webapp/cabinet_user.go → SyntheticUserIDFromCabinetDevice
+   возвращает ОТРИЦАТЕЛЬНЫЙ int64 из UUID браузера (cabinetDeviceId).
+   То есть «id без Telegram» уже есть и работает.
+
+2. У всех бизнес-таблиц поле idenity — BIGINT (где-то называется
+   telegram_id, где-то user_id), но фактически это «один и тот же
+   логический user_id».
+   - mini_app_profiles.telegram_id (PK)            — фактически user_id
+   - mini_app_dialogs.telegram_id                  — фактически user_id
+   - mini_app_daily_numbers.telegram_id            — фактически user_id
+   - mini_app_daily_affirmations.telegram_id       — фактически user_id
+   - email_verifications.telegram_id               — фактически user_id
+   - card_day_history.user_id                      — уже user_id
+   - cabinet_auth_sessions.user_id                 — уже user_id
+
+3. Email OTP уже работает (SMTP / Resend / Telegram fallback) —
+   internal/emailverify/service.go. Там есть всё, кроме одной правки
+   (см. Этап 5).
+
+4. Cabinet auth sessions (opaque token + hash) уже реализованы:
+   internal/repository/cabinet_session.go +
+   internal/db/cabinet_session.go.
+   Это ровно то, что нужно для PWA (просто использовать шире).
+
+5. Mini app уже умеет работать без Telegram (cabinetDeviceId), но не во
+   всех сценариях: ai_dialog, card_day, daily_number, dialogs пока
+   ТРЕБУЮТ initData.
+
+ВЫВОД: НЕ нужна миграция на UUID и не нужно перетаскивать данные между
+таблицами. Нужно ЛОГИЧЕСКИ закрепить, что эти колонки — единый user_id,
+и постепенно отключать обязательность initData.
+
+
+Этап 0 — Базовые принципы
+=========================
+
+1. Идентификатор пользователя на уровне сервера — BIGINT user_id.
+   - положительный = реальный telegram_id (исторически),
+   - отрицательный = синтетический id из cabinetDeviceId (исторически),
+   - НОВЫЕ email-only пользователи: отдельный диапазон (см. Этап 1).
+
+2. Auth-провайдеры:
+   - email (основной для PWA),
+   - telegram (опциональный, через initData).
+   Оба возвращают одну и ту же сессию (opaque token), та же таблица
+   cabinet_auth_sessions.
+
+3. Миграция выполняется ТОЛЬКО без даунтайма:
+   - сервер ВСЕГДА сначала добавляет новый путь (session token);
+   - потом клиент переходит на него;
+   - потом старый путь (initData в каждом запросе) удаляется.
+   НЕЛЬЗЯ удалять initData в клиенте, пока серверные эндпоинты ещё его
+   ТРЕБУЮТ (иначе 401 на проде).
+
+4. PWA активна ТОЛЬКО когда приложение открыто не из Telegram WebApp.
+   В Telegram WebView service worker не регистрируем (ломает кэш на iOS).
+
+
+Этап 1 — Модель пользователя и БД
+=================================
+
+1.1. НЕ меняем типы существующих колонок.
+     Сохраняем BIGINT во всех бизнес-таблицах. UUID не вводим.
+
+1.2. Вводим таблицу users КАК единый источник правды.
+     Это аддитивная миграция (без переноса данных в первом релизе).
+
+     CREATE TABLE IF NOT EXISTS users (
+       id            BIGSERIAL PRIMARY KEY,
+       telegram_id   BIGINT UNIQUE,
+       email         CITEXT UNIQUE,            -- опционально, если есть extension
+       email_verified_at TIMESTAMPTZ NULL,
+       cabinet_device_user_id BIGINT UNIQUE,   -- негативный id из cabinetDeviceId
+       created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+       updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+     );
+
+     ВАЖНО: users.id будет НОВЫМ диапазоном для email-only пользователей.
+     Чтобы он не пересекался с реальными telegram_id и с отрицательным
+     диапазоном cabinetDeviceId, делаем sequence начиная, например, с
+     10_000_000_000 (выше диапазона реальных Telegram ID).
+
+     ALTER SEQUENCE users_id_seq RESTART WITH 10000000000;
+
+1.3. Backfill (МЯГКИЙ, ничего не ломает):
+     При первом старте после деплоя — для каждого уникального
+     telegram_id из mini_app_profiles создаём строку в users
+     (id = telegram_id, telegram_id = telegram_id, email = email из
+     профиля, email_verified_at). Аналогично — для отрицательных id из
+     cabinet_auth_sessions / mini_app_profiles → cabinet_device_user_id.
+
+     Это значит: для существующих пользователей users.id = их прежний
+     identity. Никаких внешних ключей пока не добавляем — миграция
+     остаётся аддитивной и обратимой.
+
+1.4. Логика «UserResolver» в коде:
+     Новый пакет internal/auth (или internal/identity) с функциями:
+       - ResolveByTelegram(ctx, telegramID)
+       - ResolveByEmail(ctx, email)              — найти подтверждённого
+       - ResolveByCabinetDevice(ctx, syntheticID)
+       - LinkEmailToUser(ctx, userID, email)
+       - LinkTelegramToUser(ctx, userID, telegramID)
+     Возвращают user_id (BIGINT). Это user_id и используется во всех
+     дальнейших API.
+
+1.5. Политика merge аккаунтов (КРИТИЧНО, в плане раньше не было):
+     - Email уже привязан к telegram_user → email-логин возвращает тот
+       же user_id (история карт/диалогов сохраняется).
+     - Email не привязан, telegram_id есть → linkEmail к существующему
+       user_id.
+     - Только email (PWA, без Telegram) → создаём новую запись в users
+       с новым id (диапазон 10_000_000_000+).
+     - Если пользователь, который сидел на cabinetDeviceId (отриц.
+       user_id), верифицирует email, который УЖЕ привязан к
+       другому user_id (Telegram) → НЕ переносим автоматически.
+       Сейчас в TryConsumeOTP такой email просто блокируется
+       (ErrVerificationFailed). Оставляем это поведение как есть, но
+       логируем явно — позже можно сделать UI «авторизация на тот
+       аккаунт».
+
+
+Этап 2 — Auth backend
+=====================
+
+2.1. Эндпоинты — оставляем существующие, добавляем новые:
+     - POST /api/auth/email/send-code         (есть)
+     - POST /api/auth/email/verify-code       (есть)
+     - POST /api/auth/cabinet/validate-session(есть)
+     - POST /api/auth/cabinet/logout          (есть)
+     НОВЫЕ:
+     - POST /api/auth/telegram                — обмен initData → session
+     - GET  /api/auth/me                      — кто я (по session token)
+
+2.2. Сессии — opaque token (как сейчас) + HTTP заголовок
+     `Authorization: Bearer <token>`.
+
+     ВАЖНО: НЕ переходим сразу на httpOnly cookie. Cookie добавим
+     позже, отдельно. Bearer проще:
+     - не требует CORS credentials,
+     - работает в Telegram WebView,
+     - работает в PWA standalone,
+     - работает на разных доменах без SameSite-сложностей.
+
+     Cookie httpOnly можно вернуть в план как Этап 9 (опционально).
+
+2.3. Middleware RequireAuth (новый):
+     - читает Authorization: Bearer
+     - валидирует через ValidateCabinetSessionToken
+     - кладёт user_id в context
+     - если токена нет — fallback на initData (legacy путь),
+       пока Этап 3 не завершён.
+
+2.4. CORS middleware (КРИТИЧНО, сейчас отсутствует):
+     Прежде чем подключать PWA на отдельном домене (app.garmonia-mak.ru
+     vs api.garmonia-mak.ru), добавить:
+       Access-Control-Allow-Origin: <https фронт>
+       Access-Control-Allow-Headers: Content-Type, Authorization
+       Access-Control-Allow-Methods: POST, GET, OPTIONS
+       обработка preflight OPTIONS.
+     Без этого PWA-фронт получит CORS-error.
+
+2.5. /api/auth/telegram возвращает тот же формат, что и
+     /api/auth/email/verify-code:
+       { ok: true, sessionToken, sessionExpiresAt }
+     Это позволяет фронту использовать ОДИН путь auth-инициализации.
+
+
+Этап 3 — Перевод API на user_id из сессии
+=========================================
+
+ПОРЯДОК — строго:
+
+3.1. Сначала добавить в КАЖДЫЙ эндпоинт двойной механизм:
+     a) попытаться извлечь user_id из Authorization: Bearer
+        (RequireAuth-helper);
+     b) если токена нет — старый путь через initData.
+     Эндпоинт продолжает работать в обоих режимах. Прод не падает.
+
+3.2. Эндпоинты — порядок миграции (для каждого: добавить fallback на
+     bearer, не удалять initData ещё):
+     1) profile_get
+     2) profile (save)
+     3) card_day
+     4) card_day_message (если есть отдельный)
+     5) daily_number
+     6) daily_affirmation
+     7) ai_dialog
+     8) dialogs / dialog-save / dialog-get
+
+3.3. Репозитории НЕ меняем по сигнатуре пока нет Этапа 1.4 (UserResolver).
+     Все они уже принимают telegram_id BIGINT — продолжают принимать
+     этот же BIGINT, но называем параметр userID. Это чистая косметика
+     в Go, без SQL-изменений.
+     ВАЖНО: TryConsumeOTP в repository/email_verification.go уже
+     использует только BIGINT — менять его не нужно. Достаточно
+     убедиться, что мы передаём именно user_id.
+
+3.4. Только когда все клиенты обновятся (через 1–2 недели в проде),
+     удаляем initData-fallback из эндпоинтов. Это отдельный релиз.
+
+3.5. Эндпоинты, которые отправляют сообщение в Telegram, а не «открывают
+     экран»:
+     - /api/open-cabinet
+     - /api/open-main-menu
+     В PWA-режиме они бесполезны. Решение:
+     - на первом этапе оставить (не вызывает проблем);
+     - в финальном релизе сделать no-op или удалить из роутера.
+     НЕ удалять их раньше, чем mini app перестанет их вызывать.
+
+
+Этап 4 — Frontend: Telegram Mini App → Web App + PWA
+====================================================
+
+4.1. Слой «среда выполнения»:
+     mini_app/src/runtime.ts (новый):
+       export const runtime = {
+         isTelegram: !!window.Telegram?.WebApp?.initData,
+         isStandalone: matchMedia('(display-mode: standalone)').matches,
+       }
+     Используется во всех местах, где сейчас стоит проверка на
+     window.Telegram.WebApp.
+
+4.2. API-клиент:
+     mini_app/src/shared/api.ts (новый):
+       - apiCall(path, body): автоматически прикладывает
+         Authorization: Bearer из localStorage (sessionToken),
+         если есть.
+       - если нет токена и runtime.isTelegram → fallback кладёт
+         initData в body (для обратной совместимости).
+     Все компоненты должны переехать на этот клиент. Прямые fetch с
+     initData убирать постепенно (см. Этап 3 — порядок).
+
+4.3. Авто-обмен initData → session при старте:
+     Если runtime.isTelegram и нет валидной сессии:
+       POST /api/auth/telegram { initData } → получаем sessionToken
+       сохраняем как обычную cabinet-сессию.
+     Дальше клиент работает ТОЛЬКО через Bearer.
+
+4.4. Auth UI для PWA:
+     - Экран входа: ввод email → ввод OTP.
+     - Уже есть CabinetAuthScreen — расширить так, чтобы он стал
+       основным экраном входа PWA, когда нет ни сессии, ни initData.
+     - logout / session expired UX.
+
+4.5. PWA:
+     - Подключить vite-plugin-pwa (devDependencies — добавить).
+       npm i -D vite-plugin-pwa
+     - manifest.webmanifest с иконками, theme_color, background_color,
+       display: standalone, start_url, scope.
+     - Service worker:
+       * РЕГИСТРИРУЕМ ТОЛЬКО ЕСЛИ !runtime.isTelegram.
+       * Стратегия: app-shell precache + StaleWhileRevalidate для
+         статики /api/card-image, NetworkFirst для /api/* (или
+         просто не кэшировать /api/* — безопаснее).
+     - Install prompt UX (beforeinstallprompt).
+     - Проверка standalone на Android Chrome и iOS Safari.
+
+4.6. Удаление прямой зависимости от window.Telegram.WebApp:
+     - expand / fullscreen уже обёрнуты в try/catch — оставить как есть,
+       они вызываются только если webApp присутствует.
+     - DailyNumber вычисляется через initData; если initData нет —
+       fallback к session-based вызову. Уже сейчас в App.tsx есть
+       computeFallbackIndex — оставить.
+
+
+Этап 5 — Email OTP / Telegram OTP — корректность доставки
+========================================================
+
+5.1. КРИТИЧНО: в Service.SendCode сейчас условие отправки в Telegram:
+       if !TelegramDisabled && telegramID > 0 && BotToken != ""
+     Это означает, что любой положительный user_id будет ВОСПРИНЯТ как
+     telegram_id. Когда появятся email-only пользователи с
+     id ≥ 10_000_000_000 (см. Этап 1.2), Telegram API вернёт ошибку
+     или, что хуже, попадёт «не туда».
+
+     Исправление:
+     Service.SendCode принимает userID и ОТДЕЛЬНО (опционально)
+     telegramID *int64 — реальный telegram_id из users.
+     Telegram-ветка отправки используется только если telegramID != nil
+     и > 0. Логика «id > 0 ⇒ telegram» удаляется.
+
+     Соответственно вызывающий код (EmailSendCodeHandler) сам тянет
+     telegram_id из users (или из mini_app_profiles, если миграция
+     1.2 ещё не доделана) перед вызовом SendCode.
+
+5.2. Тоже самое для VerifyCode — оно сейчас не отправляет в Telegram,
+     но в TryConsumeOTP нужно убедиться, что мы ищем по user_id, а не
+     по telegram_id. Поскольку эта колонка фактически уже user_id,
+     достаточно переименовать параметр в Go-коде. SQL не менять.
+
+
+Этап 6 — Конфиги и инфраструктура
+=================================
+
+6.1. Новые env (добавить в .env, env.email.example):
+     APP_BASE_URL=https://app.garmonia-mak.ru
+     API_BASE_URL=https://api.garmonia-mak.ru
+     CABINET_SESSION_DAYS=30
+     CABINET_SESSION_SECRET=<отдельный секрет, 32+ байт hex>
+     # CORS:
+     ALLOWED_ORIGINS=https://app.garmonia-mak.ru
+     # bot:
+     BOT_TOKEN= (можно оставить пустым в email_only)
+
+6.2. cmd/bot/main.go: BOT_TOKEN сделать опциональным.
+     Сейчас — log.Fatal при пустом BOT_TOKEN. Это ломает email_only
+     режим. Логика:
+       if BOT_TOKEN == "" {
+         log.Println("BOT_TOKEN empty — bot polling disabled")
+         блок tgbotapi.NewBotAPI / GetUpdatesChan НЕ запускать
+       }
+     HTTP API стартует ВСЕГДА.
+
+6.3. effectiveEmailOTPSecret() сейчас деривирует секрет от BOT_TOKEN
+     при отсутствии EMAIL_OTP_SECRET. Это ОПАСНО для email_only:
+     если в проде убрать BOT_TOKEN — все ранее выданные OTP станут
+     невалидны. Решение: жёстко требовать EMAIL_OTP_SECRET (у тебя в
+     .env он уже есть, всё ок), но в коде вернуть ошибку запуска,
+     если он пуст. Никаких fallback от BOT_TOKEN.
+
+6.4. HTTPS обязателен для PWA (manifest, service worker, secure
+     transport). Должен быть на API-домене и на app-домене.
+
+6.5. CORS — см. 2.4.
+
+
+Этап 7 — Совместимость и плавный релиз (фича-флаги)
+===================================================
+
+7.1. AUTH_MODE:
+     - hybrid (по умолчанию): принимаются и initData, и session token;
+       Telegram bot запущен.
+     - email_only: bot polling выключен (BOT_TOKEN можно не задавать),
+       initData игнорируется на сервере, /api/auth/telegram возвращает
+       404.
+     - telegram_only: для отладки совместимости; обычно не нужен.
+
+7.2. Релизный порядок:
+     R1) Сервер: добавить users-таблицу (Этап 1), CORS (2.4),
+         /api/auth/telegram (2.5), Bearer middleware (2.3),
+         Этап 5.1 (SendCode без эвристики id>0).
+         Прод: hybrid, поведение для клиентов идентично.
+
+     R2) Клиент: добавить runtime.ts, api.ts, авто-обмен initData →
+         session (4.3). Поверх — экраны email-входа для PWA (4.4).
+         Прод: текущие пользователи ничего не замечают.
+
+     R3) Сервер: каждый эндпоинт переводим на двойной механизм
+         (Этап 3.1, 3.2). Поэтапно по 1–2 эндпоинта за релиз.
+
+     R4) Клиент: переходим на Bearer-only во всех вызовах.
+
+     R5) Сервер: удаляем initData-fallback из эндпоинтов (Этап 3.4),
+         делаем /api/open-cabinet, /api/open-main-menu no-op,
+         подключаем PWA в vite (4.5).
+
+     R6) Опционально: переключение на email_only, отключение бота.
+
+
+Этап 8 — Тест-план
+==================
+
+Unit:
+- emailverify.NormalizeEmail / ValidateEmailFormat
+- emailverify.SendCode: телеграм-доставка ТОЛЬКО при наличии
+  привязанного telegramID; не отправлять в TG при id из диапазона
+  email-only.
+- repository.TryConsumeOTP: верификация работает для
+  положительного и отрицательного user_id, после миграции — и для
+  10_000_000_000+.
+- repository.CreateCabinetSession / Validate / Revoke.
+- internal/auth (UserResolver) — все ветки matrix:
+  (telegram | email | cabinetDevice | combination).
+
+Integration:
+- Полный email-флоу для PWA (без initData):
+  send-code → verify-code → bearer → /api/profile-get OK.
+- Полный telegram-флоу через /api/auth/telegram:
+  initData → bearer → /api/profile-get OK.
+- Двойной механизм в эндпоинтах: тот же запрос проходит и с initData,
+  и с bearer, и с обоими сразу.
+- Email merge: тот же email верифицируется на cabinetDevice user → НЕ
+  затирает чужой профиль (TryConsumeOTP блокирует).
+
+E2E:
+- PWA install + restart + persisted session.
+- Открытие в Telegram WebApp — runtime.isTelegram = true, SW не
+  регистрируется, /api/auth/telegram срабатывает.
+- Открытие в Safari/Chrome обычным URL — email-вход, SW работает.
+
+Security:
+- rate-limit OTP (есть: 5/час на email и на user).
+- bearer токен — secure random 32 байта (есть).
+- logout инвалидирует сессию (есть).
+- "logout everywhere" — RevokeAllCabinetSessionsForUser (есть, не
+  использовалось — добавить кнопку в UI).
+- preflight OPTIONS обрабатывается, allow-credentials — нет (Bearer
+  без credentials cookie).
+
+
+Этап 9 — Опционально: переход на cookie httpOnly
+================================================
+
+Только после полной стабилизации Bearer-режима (Этап 7 R4–R6).
+Поднимает безопасность от XSS (нельзя украсть токен из localStorage).
+Требует:
+- общий домен api.X / app.X (или X.X-уровень cookie),
+- HTTPS,
+- SameSite=Lax (или None+Secure для кросс-доменного),
+- CSRF-токен (double-submit cookie).
+До тех пор Bearer — компромисс безопасность/совместимость.
+
+
+Список конкретных правок в коде (чек-лист исполнителя)
+=====================================================
+
+Backend:
+[ ] internal/db/users.go            — EnsureUsersTable + sequence ≥ 10^10
+[ ] internal/auth/resolver.go       — UserResolver (Этап 1.4)
+[ ] internal/auth/middleware.go     — RequireAuth (Bearer, fallback initData)
+[ ] internal/api/cors.go            — CORS middleware
+[ ] internal/api/auth_telegram.go   — POST /api/auth/telegram
+[ ] internal/api/auth_me.go         — GET  /api/auth/me
+[ ] cmd/bot/main.go                 — BOT_TOKEN опционален; CORS подключить
+[ ] cmd/api/main.go                 — то же
+[ ] internal/emailverify/service.go — SendCode без эвристики id>0
+                                      (Этап 5.1)
+[ ] internal/api/email_auth.go      — тянуть telegram_id из users перед
+                                      SendCode
+[ ] internal/api/profile.go,
+    profile_get.go,
+    card_day.go,
+    daily_number.go,
+    daily_affirmation.go,
+    ai_dialog.go,
+    dialogs.go                      — двойной механизм (Bearer ИЛИ initData)
+[ ] internal/api/main_menu_open.go,
+    cabinet_open.go                 — пометить deprecated, позже no-op
+[ ] internal/repository/...         — переименование параметров
+                                      telegramID → userID (без SQL)
+
+Frontend (mini_app):
+[ ] src/runtime.ts                  — isTelegram / isStandalone
+[ ] src/shared/api.ts               — apiCall с Bearer
+[ ] src/auth/exchangeTelegram.ts    — авто-обмен initData → session
+[ ] src/cabinet/CabinetAuthScreen   — расширить до главного экрана
+                                      входа PWA
+[ ] src/App.tsx                     — старт через api.ts, без прямых
+                                      fetch с initData
+[ ] vite.config.ts                  — vite-plugin-pwa
+[ ] public/manifest.webmanifest     — manifest
+[ ] index.html                      — link rel=manifest, theme-color
+[ ] package.json                    — vite-plugin-pwa в devDependencies
+
+Конфиги:
+[ ] .env                            — APP_BASE_URL, API_BASE_URL,
+                                      CABINET_SESSION_SECRET,
+                                      ALLOWED_ORIGINS, AUTH_MODE
+[ ] env.email.example               — синхронизировать
+
+
+Что НЕ делать (анти-чек-лист, иначе сломается прод)
+====================================================
+
+- НЕ менять типы колонок (BIGINT → UUID).
+- НЕ удалять initData из клиента, пока сервер ещё его требует.
+- НЕ удалять initData-валидацию из эндпоинтов одновременно с миграцией
+  клиента — только после R4.
+- НЕ переключаться сразу на cookie httpOnly — это Этап 9.
+- НЕ оставлять эвристику «id > 0 ⇒ telegram» в SendCode после R1.
+- НЕ запускать бота как обязательный (log.Fatal на пустом BOT_TOKEN).
+- НЕ кэшировать /api/* в service worker (риски устаревших ответов и
+  утечек чужих данных через общий кэш).
+- НЕ регистрировать service worker в Telegram WebView.
